@@ -1,0 +1,31 @@
+name: kateb_app
+description: "تطبيق كاتب - المنظومة المتكاملة لقراءة وتأليف المستندات والكتب محلياً بدون إنترنت (Offline-First)"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # عارض ومستعرض المستندات والملفات الاحترافي
+  flutter_pdfview: ^1.3.2
+  excel: ^4.0.3
+  share_plus: ^9.0.0
+  path: ^1.8.3
+
+  # أدوات إضافية مساعدة
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
