@@ -1,7 +1,7 @@
-name: kateb_app
-description: "تطبيق كاتب - المنظومة المتكاملة لقراءة وتأليف المستندات والكتب محلياً بدون إنترنت (Offline-First)"
+name: katib
+description: "تطبيق كاتب (katib) - المنظومة المتكاملة لقراءة وتأليف المستندات والكتب محلياً بدون إنترنت (Offline-First)"
 publish_to: "none"
-version: 1.0.0+1
+version: 2.0.3+203
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

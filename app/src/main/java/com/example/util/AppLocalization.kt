@@ -26,7 +26,7 @@ object AppStrings {
     }
 
     private val arabicStrings = mapOf(
-        "app_name" to "كاتب",
+        "app_name" to "katib",
         "tab_files" to "المصادر",
         "tab_sources" to "المصادر",
         "tab_extraction" to "الاستخلاص",
@@ -70,7 +70,7 @@ object AppStrings {
     )
 
     private val englishStrings = mapOf(
-        "app_name" to "Kateeb",
+        "app_name" to "katib",
         "tab_files" to "Sources",
         "tab_sources" to "Sources",
         "tab_extraction" to "Extraction",
@@ -114,7 +114,7 @@ object AppStrings {
     )
 
     private val spanishStrings = mapOf(
-        "app_name" to "Kateeb",
+        "app_name" to "katib",
         "tab_files" to "Fuentes",
         "tab_sources" to "Fuentes",
         "tab_extraction" to "Extracción",
@@ -158,7 +158,7 @@ object AppStrings {
     )
 
     private val frenchStrings = mapOf(
-        "app_name" to "Kateeb",
+        "app_name" to "katib",
         "tab_files" to "Sources",
         "tab_sources" to "Sources",
         "tab_extraction" to "Extraction",

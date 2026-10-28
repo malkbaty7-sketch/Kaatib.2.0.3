@@ -847,7 +847,7 @@ fun SettingsScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "عن تطبيق كاتب (Kateeb)",
+                    text = "عن تطبيق كاتب (katib)",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = theme.textColor
@@ -864,7 +864,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("الإصدار", fontSize = 11.sp, color = Color.Gray)
-                    Text("2.5.0 (النسخة الشاملة)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                    Text("2.0.3 (النسخة الشاملة)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
                 }
             }
         }

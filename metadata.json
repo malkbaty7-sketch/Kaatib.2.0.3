@@ -1,5 +1,5 @@
 {
-  "name": "كاتب",
+  "name": "katib",
   "description": "تطبيق كاتب المتكامل لقراءة وحفظ واستخلاص الكتب وتأليف الكتب والأبحاث مع قاعدة بيانات Room ومكتبة كتب محفوظة",
   "requestFramePermissions": [],
   "majorCapabilities": [

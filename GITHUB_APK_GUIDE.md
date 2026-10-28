@@ -1,45 +1,37 @@
-# دليل بناء وتحميل ملف APK لتطبيق "كاتب" عبر GitHub
+# دليل بناء وتحميل ملف APK لتطبيق "katib" (الإصدار 2.0.3) عبر GitHub
 
-تم تجهيز التطبيق بالكامل مع مفاتيح التوقيع الرسمية (Release & Debug Keystores) وملفات العمل التلقائي (GitHub Actions Workflows) لبناء ملف **APK موقع وجاهز للتثبيت** مباشرة من GitHub بدون الحاجة لأي إعدادات معقدة.
+تم تجهيز تطبيق **katib** (الإصدار **2.0.3**) بالكامل مع مفاتيح التوقيع الرسمية (Release & Debug Keystores) وملفات العمل التلقائي (GitHub Actions Workflows) لبناء ملف **APK موقع وجاهز للتثبيت على الهاتف** مباشرة من GitHub بدون الحاجة لأي إعدادات إضافية.
 
 ---
 
-## 1. الملفات والمفاتيح المضافة في المشروع
+## 1. الملفات والمفاتيح المجهزة في المشروع
 
-1. **مفتاح التوقيع الرسمي للإصدار النهائي (Release Keystore):**
-   - **ملف المفتاح:** `my-upload-key.jks` (بالإضافة إلى نسخة Base64 في `my-upload-key.jks.base64`)
-   - **اسم المفتاح (Key Alias):** `upload`
-   - **كلمة مرور المخزن (Store Password):** `katib2026`
-   - **كلمة مرور المفتاح (Key Password):** `katib2026`
+1. **معلومات التطبيق والإصدار:**
+   - **اسم التطبيق (`app_name`):** `katib`
+   - **رقم الإصدار (`versionName`):** `2.0.3`
+   - **كود الإصدار (`versionCode`):** `203`
+
+2. **مفتاح التوقيع الرسمي للإصدار النهائي (Release Keystore):**
+   - **ملف المفتاح:** `my-upload-key.jks` (مع نسخة مشفرة تلقائياً في `my-upload-key.jks.base64`)
+   - **اسم المفتاح (`Key Alias`):** `upload`
+   - **كلمة مرور المخزن (`Store Password`):** `katib2026`
+   - **كلمة مرور المفتاح (`Key Password`):** `katib2026`
    - **بصمة الشهادة (SHA-1):** `5F:CD:A4:46:36:03:01:55:81:2E:A4:68:FF:CB:93:A3:E1:73:86:B0`
    - **بصمة الشهادة (SHA-256):** `3B:8F:22:05:DD:52:4F:FA:13:DD:23:7E:96:12:46:E2:21:3D:D4:5E:C8:68:71:55:92:33:DF:AE:BA:25:3B:3F`
 
-2. **مفتاح التوقيع التجريبي (Debug Keystore):**
-   - محفوظ في `debug.keystore.base64` ويتم فك تشفيره تلقائياً أثناء البناء على GitHub.
-
-3. **ملفات GitHub Actions المحدثة (متوافقة مع JDK 21 و Gradle 9.3.1 و AGP 9.1.1):**
-   - `.github/workflows/build_apk.yml`: يبني نسخة **Release APK موقعة** (`katib-release-signed-apk`).
-   - `.github/workflows/build_debug_apk.yml`: يبني نسخة **Debug APK** (`katib-debug-apk`).
+3. **ملفات GitHub Actions المهيأة للبناء التلقائي:**
+   - `.github/workflows/build_apk.yml`: يبني نسخة **Release APK موقعة** (`katib-v2.0.3-release-signed.apk`) ونسخة Debug ويرفعها إلى كل من **Artifacts** وقسم **Releases** في GitHub.
+   - `.github/workflows/build_debug_apk.yml`: يبني نسخة **Debug APK** (`katib-v2.0.3-debug.apk`).
 
 ---
 
-## 2. خطوات رفع المشروع وتحميل ملف الـ APK من GitHub
+## 2. خطوات رفع المشروع وتحميل ملف الـ APK وتثبيته على هاتفك
 
-1. **رفع التحديثات إلى GitHub:**
-   - من قائمة الإعدادات في AI Studio، اضغط على **Push to GitHub** أو قم بتصدير المشروع كملف ZIP ورفعه إلى مستودعك `Katib-2.0.2`.
-2. **تشغيل عملية البناء (GitHub Actions):**
-   - بمجرد دفع الكود إلى الفرع `main` أو `master`، سيبدأ البناء تلقائياً.
-   - يمكنك أيضاً الدخول إلى تبويب **Actions** في مستودعك على GitHub، واختيار **Build Signed Android APK** ثم الضغط على **Run workflow**.
-3. **تحميل ملف الـ APK:**
-   - بعد انتهاء العملية بنجاح (علامة صح خضراء ✅)، افتح تفاصيل عملية البناء (Workflow Run).
-   - انزل إلى قسم **Artifacts** في أسفل الصفحة.
-   - اضغط على **`katib-release-signed-apk`** لتحميل ملف الـ APK الموقع (`katib-release-signed.apk`) وتثبيته مباشرة على هاتفك.
-
----
-
-## 3. (اختياري) إضافة مفتاح Gemini API في GitHub Secrets
-
-يعمل البناء تلقائياً بدون أي Secrets إضافية، ولكن إذا أردت تضمين مفتاح `GEMINI_API_KEY` داخل نسخة الـ APK المبنية من GitHub:
-1. اذهب إلى مستودعك في GitHub -> **Settings** -> **Secrets and variables** -> **Actions**.
-2. اضغط **New repository secret**.
-3. أضف الاسم `GEMINI_API_KEY` وضع قيمة مفتاحك.
+1. **رفع المشروع إلى GitHub:**
+   - من قائمة الإعدادات في AI Studio، اختر **Push to GitHub** (أو قم بتصدير المشروع كملف ZIP ورفعه إلى مستودعك في GitHub).
+2. **تشغيل البناء التلقائي (GitHub Actions):**
+   - بمجرد رفع الكود إلى الفرع `main` أو `master`، سيبدأ بناء ملف الـ APK تلقائياً.
+   - أو ادخل إلى تبويب **Actions** في مستودعك على GitHub، واختر **Build Signed Android APK (katib v2.0.3)** ثم اضغط **Run workflow**.
+3. **تحميل ملف الـ APK مباشرة إلى هاتفك:**
+   - **الطريقة الأولى (من صفحة Releases):** ادخل إلى قسم **Releases** في الصفحة الرئيسية للمستودع على GitHub، واضغط مباشرة على ملف **`katib-v2.0.3-release-signed.apk`** لتحميله وتثبيته على هاتفك.
+   - **الطريقة الثانية (من صفحة Actions):** افتح عملية البناء المكتملة بنجاح (✅)، وانزل إلى قسم **Artifacts** في أسفل الصفحة، وحمّل **`katib-v2.0.3-signed-apk`**.

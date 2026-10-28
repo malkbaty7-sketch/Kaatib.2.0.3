@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">كاتب</string>
+    <string name="app_name">katib</string>
     <string name="tab_files">المصادر</string>
     <string name="tab_extraction">الاستخلاص</string>
     <string name="tab_projects">المشاريع</string>
