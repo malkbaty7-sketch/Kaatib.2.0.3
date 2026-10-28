@@ -40,7 +40,7 @@ class TtsManager(context: Context) : TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val arResult = tts?.setLanguage(Locale("ar"))
+            val arResult = tts?.setLanguage(Locale.forLanguageTag("ar"))
             if (arResult == TextToSpeech.LANG_MISSING_DATA || arResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.setLanguage(Locale.getDefault())
             }

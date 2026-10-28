@@ -6,12 +6,12 @@ void main() {
 }
 
 class KatebApp extends StatelessWidget {
-  const KatebApp({Key? key}) : super(key: key);
+  const KatebApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'كاتب',
+      title: 'katib',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         fontFamily: 'Amiri',
@@ -28,7 +28,7 @@ class KatebApp extends StatelessWidget {
 }
 
 class KatebHomeScreen extends StatelessWidget {
-  const KatebHomeScreen({Key? key}) : super(key: key);
+  const KatebHomeScreen({super.key});
 
   // قائمة ملفات تجريبية لتوضيح الربط المباشر
   final List<Map<String, String>> sampleDocs = const [
@@ -46,7 +46,7 @@ class KatebHomeScreen extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: const Color(0xFF0F172A),
           title: const Text(
-            "تطبيق كاتب • المستندات والمكتبة",
+            "تطبيق katib • المستندات والمكتبة",
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
           ),
           actions: [
@@ -68,13 +68,13 @@ class KatebHomeScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 color: const Color(0xFF1E293B),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFD97706).withOpacity(0.2)),
+                border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.2)),
               ),
               child: ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFD97706).withOpacity(0.15),
+                    color: const Color(0xFFD97706).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(

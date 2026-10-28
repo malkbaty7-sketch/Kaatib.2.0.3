@@ -16,6 +16,8 @@
 local.properties
 .env
 debug.keystore
+my-upload-key.jks
+gradle/wrapper/gradle-wrapper.jar
 .build-outputs
 /app/build
 /public/assets/aistudio/

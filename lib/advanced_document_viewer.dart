@@ -5,7 +5,7 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:excel/excel.dart' as excel_lib;
 import 'package:share_plus/share_plus.dart';
 
-/// عارض المستندات الذكي والاحترافي لتطبيق "كاتب"
+/// عارض المستندات الذكي والاحترافي لتطبيق "katib"
 /// يدعم صيغ: PDF, Word/TXT (.docx, .doc, .txt), Excel/CSV (.xlsx, .xls, .csv)
 /// مع الثيم الملكي: الأزرق الداكن (#0F172A) والألوان الذهبية (#D97706)
 class AdvancedDocumentViewerPage extends StatefulWidget {
@@ -13,17 +13,17 @@ class AdvancedDocumentViewerPage extends StatefulWidget {
   final String fileName;
 
   const AdvancedDocumentViewerPage({
-    Key? key,
+    super.key,
     required this.filePath,
     required this.fileName,
-  }) : super(key: key);
+  });
 
   @override
   State<AdvancedDocumentViewerPage> createState() => _AdvancedDocumentViewerPageState();
 }
 
 class _AdvancedDocumentViewerPageState extends State<AdvancedDocumentViewerPage> {
-  // الثيم الملكي لتطبيق كاتب
+  // الثيم الملكي لتطبيق katib
   static const Color royalNavyDark = Color(0xFF0F172A);
   static const Color royalNavyCard = Color(0xFF1E293B);
   static const Color royalGold = Color(0xFFD97706);
@@ -174,10 +174,10 @@ class _AdvancedDocumentViewerPageState extends State<AdvancedDocumentViewerPage>
             decoration: BoxDecoration(
               color: royalNavyCard,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: royalGold.withOpacity(0.3)),
+              border: Border.all(color: royalGold.withValues(alpha: 0.3)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),
@@ -221,11 +221,11 @@ class _AdvancedDocumentViewerPageState extends State<AdvancedDocumentViewerPage>
                 headingRowColor: WidgetStateProperty.all(royalNavyCard),
                 dataRowColor: WidgetStateProperty.resolveWith<Color>((states) {
                   if (states.contains(WidgetState.hovered)) {
-                    return royalGold.withOpacity(0.12);
+                    return royalGold.withValues(alpha: 0.12);
                   }
                   return royalNavyDark;
                 }),
-                border: TableBorder.all(color: royalGold.withOpacity(0.3), width: 1),
+                border: TableBorder.all(color: royalGold.withValues(alpha: 0.3), width: 1),
                 columns: List.generate(
                   rows.first.length,
                   (index) => DataColumn(

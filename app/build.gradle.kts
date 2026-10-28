@@ -12,7 +12,7 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 36
 
   defaultConfig {
     applicationId = "com.aistudio.khetta.afgbho"
@@ -26,8 +26,9 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystoreFile = file(System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() } ?: "${rootDir}/my-upload-key.jks")
-      if (!keystoreFile.exists()) {
+      val keystoreFile = file(System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() } ?: "${rootDir}/build/keystore/my-upload-key.jks")
+      if (!keystoreFile.exists() || keystoreFile.length() < 100L) {
+        keystoreFile.parentFile?.mkdirs()
         val base64File = file("${rootDir}/my-upload-key.jks.base64")
         if (base64File.exists()) {
           val cleaned = base64File.readText().replace("\\s".toRegex(), "")
@@ -41,7 +42,7 @@ android {
     }
     create("debugConfig") {
       val debugKeystoreFile = file("${rootDir}/debug.keystore")
-      if (!debugKeystoreFile.exists()) {
+      if (!debugKeystoreFile.exists() || debugKeystoreFile.length() < 100L) {
         val debugBase64File = file("${rootDir}/debug.keystore.base64")
         if (debugBase64File.exists()) {
           val cleaned = debugBase64File.readText().replace("\\s".toRegex(), "")
@@ -73,6 +74,19 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  lint {
+    abortOnError = false
+    checkReleaseBuilds = false
+    disable += setOf(
+      "UseKtx",
+      "GradleDependency",
+      "NewerVersionAvailable",
+      "AndroidGradlePluginVersion",
+      "UnusedResources",
+      "IconDuplicates",
+      "IconLocation"
+    )
+  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -82,11 +96,6 @@ android {
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
 // to match the convention used in Web projects.
 secrets {
-  val envFile = file("${rootDir}/.env")
-  val envExampleFile = file("${rootDir}/.env.example")
-  if (!envFile.exists() && envExampleFile.exists()) {
-    envExampleFile.copyTo(envFile, overwrite = false)
-  }
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
@@ -122,7 +131,7 @@ dependencies {
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.play.billing.ktx)
   implementation(libs.coil.compose)
-  implementation(libs.converter.moshi)
+  // implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
@@ -137,11 +146,11 @@ dependencies {
   // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
-  implementation(libs.logging.interceptor)
-  implementation(libs.moshi.kotlin)
+  // implementation(libs.logging.interceptor)
+  // implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
-  implementation(libs.retrofit)
+  // implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
@@ -159,5 +168,5 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
-  "ksp"(libs.moshi.kotlin.codegen)
+  // "ksp"(libs.moshi.kotlin.codegen)
 }

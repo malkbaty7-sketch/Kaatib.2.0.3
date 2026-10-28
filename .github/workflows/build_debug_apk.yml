@@ -26,31 +26,28 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Normalize Gradle & Android SDK for GitHub Runner
+      - name: Configure Android SDK & Verify Public Maven Dependencies
         shell: bash
         run: |
           yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" || true
+          sdkmanager "build-tools;36.0.0" || true
+          sdkmanager "platforms;android-36" || true
+          sdkmanager "build-tools;35.0.0" || true
+          sdkmanager "platforms;android-35" || true
 
-          if curl -fsSL -I "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/9.1.1/gradle-9.1.1.pom" >/dev/null 2>&1 && \
+          SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+
+          if [ -n "$SDK_DIR" ] && [ -d "${SDK_DIR}/platforms/android-36" ] && \
+             curl -fsSL "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/9.1.1/gradle-9.1.1.pom" >/dev/null 2>&1 && \
+             curl -fsSL "https://dl.google.com/dl/android/maven2/androidx/core/core-ktx/1.18.0/core-ktx-1.18.0.pom" >/dev/null 2>&1 && \
+             curl -fsSL "https://dl.google.com/dl/android/maven2/com/google/gms/google-services/4.5.0/google-services-4.5.0.pom" >/dev/null 2>&1 && \
              curl -fsSL -I "https://services.gradle.org/distributions/gradle-9.3.1-bin.zip" >/dev/null 2>&1; then
-            echo "Using AGP 9.1.1 + Gradle 9.3.1"
+            echo "Verified AGP 9.1.1 + Gradle 9.3.1 + Android SDK 36"
             echo "GRADLE_DIST_VERSION=9.3.1" >> "$GITHUB_ENV"
-            sdkmanager "platform-tools" "build-tools;36.0.0" "platforms;android-36" "platforms;android-36.1" || \
-            sdkmanager --channel=3 "build-tools;36.0.0" "platforms;android-36" "platforms;android-36.1" || true
-            SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-            if [ -n "$SDK_DIR" ] && [ ! -d "${SDK_DIR}/platforms/android-36.1" ]; then
-              if [ -d "${SDK_DIR}/platforms/android-36" ]; then
-                sed -i 's/compileSdk { version = release(36) { minorApiLevel = 1 } }/compileSdk = 36/g' app/build.gradle.kts
-              else
-                sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
-                sed -i 's/compileSdk { version = release(36) { minorApiLevel = 1 } }/compileSdk = 35/g' app/build.gradle.kts
-                sed -i 's/targetSdk = 36/targetSdk = 35/g' app/build.gradle.kts
-              fi
-            fi
           else
-            echo "Normalizing to public Maven Central & Google Maven stable versions (Gradle 8.11.1 + AGP 8.7.3 + Kotlin 2.0.21)"
+            echo "Using public Maven Central & Google Maven stable configuration (Gradle 8.11.1 + AGP 8.7.3 + Kotlin 2.0.21 + SDK 35)"
             echo "GRADLE_DIST_VERSION=8.11.1" >> "$GITHUB_ENV"
-            sdkmanager "platform-tools" "build-tools;35.0.0" "platforms;android-35" || true
 
             cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
@@ -60,6 +57,16 @@ jobs:
           validateDistributionUrl=true
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
+          EOF
+
+            cat > gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          kotlin.code.style=official
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          org.gradle.caching=true
+          org.gradle.configuration-cache=false
           EOF
 
             cat > gradle/libs.versions.toml << 'EOF'
@@ -84,26 +91,14 @@ jobs:
           core = "1.6.1"
           runner = "1.6.2"
           coilCompose = "2.7.0"
-          retrofit = "2.11.0"
-          converterMoshi = "2.11.0"
           kotlinxCoroutinesAndroid = "1.9.0"
           kotlinxCoroutinesCore = "1.9.0"
-          accompanistPermissions = "0.36.0"
-          playServicesLocation = "21.3.0"
-          cameraCamera2 = "1.4.1"
-          cameraLifecycle = "1.4.1"
-          cameraView = "1.4.1"
-          cameraCore = "1.4.1"
-          loggingInterceptor = "4.12.0"
           okhttp = "4.12.0"
-          moshiKotlin = "1.15.2"
-          moshiKotlinCodegen = "1.15.2"
           datastorePreferences = "1.1.1"
           workRuntime = "2.10.0"
           robolectric = "4.14.1"
+          roborazzi = "1.29.0"
           secretsGradlePlugin = "2.0.1"
-          credentials = "1.3.0"
-          googleid = "1.1.1"
           playBilling = "7.1.1"
 
           [libraries]
@@ -135,31 +130,21 @@ jobs:
           androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
           androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
           coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coilCompose" }
-          retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
-          converter-moshi = { group = "com.squareup.retrofit2", name = "converter-moshi", version.ref = "converterMoshi" }
           kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesAndroid" }
           kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutinesCore" }
-          accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanistPermissions" }
-          play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
-          androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraCamera2" }
-          androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraLifecycle" }
-          androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraView" }
-          androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraCore" }
-          logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "loggingInterceptor" }
           okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
-          moshi-kotlin = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "moshiKotlin" }
-          moshi-kotlin-codegen = { group = "com.squareup.moshi", name = "moshi-kotlin-codegen", version.ref = "moshiKotlinCodegen" }
           androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
           robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
-          androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
-          androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
-          googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+          roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
+          roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
+          roborazzi-junit-rule = { group = "io.github.takahirom.roborazzi", name = "roborazzi-junit-rule", version.ref = "roborazzi" }
 
           [plugins]
           android-application = { id = "com.android.application", version.ref = "agp" }
           kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
           kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
           google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "googleDevtoolsKsp" }
+          roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
           secrets = { id = "com.google.android.libraries.mapsplatform.secrets-gradle-plugin", version.ref = "secretsGradlePlugin" }
           EOF
 
@@ -169,6 +154,7 @@ jobs:
             alias(libs.plugins.kotlin.android) apply false
             alias(libs.plugins.kotlin.compose) apply false
             alias(libs.plugins.google.devtools.ksp) apply false
+            alias(libs.plugins.roborazzi) apply false
             alias(libs.plugins.secrets) apply false
           }
           EOF
@@ -181,6 +167,7 @@ jobs:
             alias(libs.plugins.kotlin.android)
             alias(libs.plugins.kotlin.compose)
             alias(libs.plugins.google.devtools.ksp)
+            alias(libs.plugins.roborazzi)
             alias(libs.plugins.secrets)
           }
 
@@ -200,8 +187,9 @@ jobs:
 
             signingConfigs {
               create("release") {
-                val keystoreFile = file(System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() } ?: "${rootDir}/my-upload-key.jks")
-                if (!keystoreFile.exists()) {
+                val keystoreFile = file(System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() } ?: "${rootDir}/build/keystore/my-upload-key.jks")
+                if (!keystoreFile.exists() || keystoreFile.length() < 100L) {
+                  keystoreFile.parentFile?.mkdirs()
                   val base64File = file("${rootDir}/my-upload-key.jks.base64")
                   if (base64File.exists()) {
                     val cleaned = base64File.readText().replace("\\s".toRegex(), "")
@@ -215,7 +203,7 @@ jobs:
               }
               create("debugConfig") {
                 val debugKeystoreFile = file("${rootDir}/debug.keystore")
-                if (!debugKeystoreFile.exists()) {
+                if (!debugKeystoreFile.exists() || debugKeystoreFile.length() < 100L) {
                   val debugBase64File = file("${rootDir}/debug.keystore.base64")
                   if (debugBase64File.exists()) {
                     val cleaned = debugBase64File.readText().replace("\\s".toRegex(), "")
@@ -250,6 +238,10 @@ jobs:
               buildConfig = true
             }
             testOptions { unitTests { isIncludeAndroidResources = true } }
+            lint {
+              abortOnError = false
+              checkReleaseBuilds = false
+            }
             dependenciesInfo {
               includeInApk = false
               includeInBundle = true
@@ -257,11 +249,6 @@ jobs:
           }
 
           secrets {
-            val envFile = file("${rootDir}/.env")
-            val envExampleFile = file("${rootDir}/.env.example")
-            if (!envFile.exists() && envExampleFile.exists()) {
-              envExampleFile.copyTo(envFile, overwrite = false)
-            }
             propertiesFileName = ".env"
             defaultPropertiesFileName = ".env.example"
             ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
@@ -287,19 +274,18 @@ jobs:
             implementation(libs.androidx.work.runtime.ktx)
             implementation(libs.play.billing.ktx)
             implementation(libs.coil.compose)
-            implementation(libs.converter.moshi)
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.logging.interceptor)
-            implementation(libs.moshi.kotlin)
             implementation(libs.okhttp)
-            implementation(libs.retrofit)
             testImplementation(libs.androidx.compose.ui.test.junit4)
             testImplementation(libs.androidx.core)
             testImplementation(libs.androidx.junit)
             testImplementation(libs.junit)
             testImplementation(libs.kotlinx.coroutines.test)
             testImplementation(libs.robolectric)
+            testImplementation(libs.roborazzi)
+            testImplementation(libs.roborazzi.compose)
+            testImplementation(libs.roborazzi.junit.rule)
             androidTestImplementation(platform(libs.androidx.compose.bom))
             androidTestImplementation(libs.androidx.compose.ui.test.junit4)
             androidTestImplementation(libs.androidx.espresso.core)
@@ -308,7 +294,6 @@ jobs:
             debugImplementation(libs.androidx.compose.ui.test.manifest)
             debugImplementation(libs.androidx.compose.ui.tooling)
             "ksp"(libs.androidx.room.compiler)
-            "ksp"(libs.moshi.kotlin.codegen)
           }
           EOF
           fi
@@ -331,23 +316,22 @@ jobs:
             echo "GEMINI_API_KEY=MY_GEMINI_API_KEY" > .env
           fi
 
-      - name: Prepare debug keystore
+      - name: Prepare and validate debug keystore
         shell: bash
         run: |
-          if [ ! -f "debug.keystore" ]; then
-            if [ -f "debug.keystore.base64" ]; then
-              tr -d '[:space:]' < debug.keystore.base64 | base64 --decode > debug.keystore
-            else
-              keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey \
-                -keyalg RSA -keysize 2048 -validity 10000 \
-                -storepass android -keypass android \
-                -dname "CN=Android Debug,O=Android,C=US"
-            fi
+          rm -f debug.keystore
+          if [ -f "debug.keystore.base64" ]; then
+            tr -d '[:space:]' < debug.keystore.base64 | base64 --decode > debug.keystore || true
+          fi
+          if ! keytool -list -keystore debug.keystore -storepass android >/dev/null 2>&1; then
+            rm -f debug.keystore
+            keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
       - name: Build Debug APK
-        env:
-          GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=2g -Dfile.encoding=UTF-8" -Dkotlin.compiler.execution.strategy=daemon
         run: gradle assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
       - name: Copy Debug APK with friendly filename

@@ -60,14 +60,10 @@ fun GrammarRefinementDialog(
         if (currentContent.contains("مما لا شك فيه")) {
             list.add(GrammarIssue("مما لا شك فيه", "بلا ريب", "تحسين أسلوبي وبلاغي لتجنب التكرار الرتيب للعبارات التمهيدية", "بلاغي"))
         }
-        if (currentContent.contains("تم كتابة") || currentContent.contains("تم عمل")) {
-            list.add(GrammarIssue("تم عمل", "أُنجز أو عُمِل", "تحسين تركيبي لتجنب صيغة 'تم' الركيكة واستبدالها بالفعل المبني للمجهول أو المباشر", "نحوي"))
-        }
-
-        // Fallback realistic examples if text is short
-        if (list.isEmpty()) {
-            list.add(GrammarIssue("همزة الوصل والقطع", "تدقيق الهمزات", "مراجعة مواضع همزة القطع والوصل لضمان دقة القراءة والإلقاء", "إملائي"))
-            list.add(GrammarIssue("تناسق الفقرات", "روابط الربط البلاغي", "استخدام حروف عطف دقيقة (ثم، فـ، بل) لتعزيز انسيابية الفكرة", "بلاغي"))
+        if (currentContent.contains("تم كتابة")) {
+            list.add(GrammarIssue("تم كتابة", "كُتِب", "تحسين تركيبي لتجنب صيغة 'تم' الركيكة واستبدالها بالفعل المبني للمجهول", "نحوي"))
+        } else if (currentContent.contains("تم عمل")) {
+            list.add(GrammarIssue("تم عمل", "أُنجز", "تحسين تركيبي لتجنب صيغة 'تم' الركيكة واستبدالها بالفعل المبني للمجهول", "نحوي"))
         }
         list.toList()
     }

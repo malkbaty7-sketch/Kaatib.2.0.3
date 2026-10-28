@@ -612,7 +612,7 @@ private fun FreeFormTextEngineTab(
                     )
 
                     // Scale Slider
-                    Text("حجم والتكبير (Scale): ${String.format("%.1f", activeLayer.scale)}x", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Text("حجم والتكبير (Scale): ${String.format(java.util.Locale.US, "%.1f", activeLayer.scale)}x", fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     Slider(
                         value = activeLayer.scale,
                         onValueChange = { sc ->
@@ -804,7 +804,7 @@ private fun StickersAndBadgesTab(
                         valueRange = 0f..360f
                     )
 
-                    Text("حجم وتكبير الملصق: ${String.format("%.1f", activeSticker.scale)}x", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Text("حجم وتكبير الملصق: ${String.format(java.util.Locale.US, "%.1f", activeSticker.scale)}x", fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     Slider(
                         value = activeSticker.scale,
                         onValueChange = { sc ->

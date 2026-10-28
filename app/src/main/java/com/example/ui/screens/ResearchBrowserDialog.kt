@@ -247,12 +247,14 @@ fun ResearchBrowserDialog(
                     ) {
                         AndroidView(
                             factory = { ctx ->
-                                WebView(ctx).apply {
+                                @android.annotation.SuppressLint("SetJavaScriptEnabled")
+                                val webView = WebView(ctx).apply {
                                     settings.javaScriptEnabled = true
                                     settings.domStorageEnabled = true
                                     webViewClient = WebViewClient()
                                     loadUrl(activeWebUrl)
                                 }
+                                webView
                             },
                             modifier = Modifier.fillMaxSize()
                         )
