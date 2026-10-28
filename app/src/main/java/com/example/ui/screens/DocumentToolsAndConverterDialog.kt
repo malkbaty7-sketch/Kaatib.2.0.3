@@ -35,8 +35,10 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.example.data.model.AppThemeData
 import com.example.util.ArabicDocumentProcessor
+import com.example.util.DocmoDocumentBridge
 import com.example.util.MultiFormatDocumentEngine
 import com.example.util.OfflineDocumentConverter
+import com.example.util.PdfDiagnosticReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,6 +85,28 @@ fun DocumentToolsAndConverterDialog(
 
     // Compression level
     var compressionLevel by remember { mutableStateOf(OfflineDocumentConverter.CompressionLevel.BALANCED) }
+
+    // DOCMO Integrated States
+    var showDocmoWebStudioDialog by remember { mutableStateOf(false) }
+    var docmoDiagnosticReport by remember { mutableStateOf<PdfDiagnosticReport?>(null) }
+
+    val saveResultToDeviceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { destUri: Uri? ->
+        val file = resultFile
+        if (destUri != null && file != null) {
+            coroutineScope.launch {
+                val res = withContext(Dispatchers.IO) {
+                    DocmoDocumentBridge.saveFileToDestinationUri(context, destUri, file)
+                }
+                if (res.isSuccess) {
+                    Toast.makeText(context, "تم حفظ ${file.name} في الموقع المختار بنجاح!", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, res.exceptionOrNull()?.message ?: "تعذر حفظ الملف", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     // SAF Picker for single document
     val singlePickerLauncher = rememberLauncherForActivityResult(
@@ -253,10 +277,11 @@ fun DocumentToolsAndConverterDialog(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val tabs = listOf(
-                        Pair("ARABIC_STUDIO", "✨ استخراج وتشكيل عربي"),
+                        Pair("ARABIC_STUDIO", "✨ استخراج عربي"),
+                        Pair("DOCMO", "💎 استوديو DOCMO"),
                         Pair("CONVERT", "⚡ تحويل الصيغ"),
-                        Pair("SECURITY", "🔒 أمان وتشفير PDF"),
-                        Pair("UTILS", "✂️ دمج وتقسيم وضغط")
+                        Pair("SECURITY", "🔒 أمان PDF"),
+                        Pair("UTILS", "✂️ دمج وتقسيم")
                     )
                     for ((id, title) in tabs) {
                         val isSelected = activeTab == id
@@ -314,7 +339,10 @@ fun DocumentToolsAndConverterDialog(
                             }
                             Text("اسم الملف: ${resultFile!!.name} (${resultFile!!.length() / 1024} KB)", fontSize = 11.sp, color = Color(0xFF047857))
 
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Button(
                                     onClick = {
                                         onOpenConvertedDocument?.invoke(Uri.fromFile(resultFile!!).toString(), resultFile!!.name)
@@ -322,21 +350,34 @@ fun DocumentToolsAndConverterDialog(
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                                     shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("عرض الملف الآن", fontSize = 11.sp)
+                                    Text("عرض الآن", fontSize = 10.sp)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        saveResultToDeviceLauncher.launch(resultFile!!.name)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("حفظ في الهاتف", fontSize = 10.sp)
                                 }
 
                                 OutlinedButton(
                                     onClick = { shareFile(resultFile!!) },
                                     shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("مشاركة وتصدير", fontSize = 11.sp)
+                                    Text("مشاركة", fontSize = 10.sp)
                                 }
                             }
                         }
@@ -823,6 +864,240 @@ fun DocumentToolsAndConverterDialog(
                             }
                         }
 
+                        "DOCMO" -> {
+                            // 1. Launch Full DOCMO Interactive Studio Banner
+                            item {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(38.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(Color(0xFF2563EB)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
+                                            }
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "استوديو DOCMO المتكامل (الواجهة الكاملة)",
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White
+                                                )
+                                                Text(
+                                                    text = "معاينة PDF وWord وExcel وCSV وAccess وتعديل الخلايا والفقرات محليًا",
+                                                    fontSize = 11.sp,
+                                                    color = Color(0xFF94A3B8)
+                                                )
+                                            }
+                                        }
+
+                                        Button(
+                                            onClick = { showDocmoWebStudioDialog = true },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                                        ) {
+                                            Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("فتح واجهة استوديو DOCMO الكاملة", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 2. Local PDF Diagnostic Report (inspectPdf)
+                            item {
+                                ConversionActionCard(
+                                    title = "فحص PDF التشخيصي المحلي (DOCMO PDF Inspector)",
+                                    description = "فحص ترويسة %PDF-، حالة التشفير (/Encrypt)، خرائط الخطوط (/ToUnicode)، الصور، الصفحات، والمحارف العربية.",
+                                    icon = Icons.Default.Verified,
+                                    iconTint = Color(0xFF0284C7),
+                                    enabled = selectedUri != null,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            isProcessing = true
+                                            processingStatusMessage = "جارٍ فحص بنية ملف PDF محليًا..."
+                                            val rep = withContext(Dispatchers.IO) {
+                                                DocmoDocumentBridge.inspectPdfLocally(context, selectedUri!!, selectedDocName)
+                                            }
+                                            docmoDiagnosticReport = rep
+                                            isProcessing = false
+                                        }
+                                    }
+                                )
+                            }
+
+                            if (docmoDiagnosticReport != null) {
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(14.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                "نتائج فحص PDF المحلي (${docmoDiagnosticReport!!.fileName}):",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.sp,
+                                                color = Color(0xFF0369A1)
+                                            )
+                                            docmoDiagnosticReport!!.findings.forEach { line ->
+                                                Text("• $line", fontSize = 11.sp, color = Color(0xFF0C4A6E))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // 3. Export Extracted PDF Text to Excel (.xlsx)
+                            item {
+                                ConversionActionCard(
+                                    title = "استخراج نص PDF وتصديره إلى مصنف Excel (.xlsx)",
+                                    description = "استخراج السطور مع أرقام الصفحات وتوليد ملف Excel (.xlsx) يدعم اتجاه RTL العربي.",
+                                    icon = Icons.Default.TableChart,
+                                    iconTint = Color(0xFF059669),
+                                    enabled = selectedUri != null,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            isProcessing = true
+                                            processingStatusMessage = "جارٍ استخراج نص PDF وبناء مصنف Excel (.xlsx)..."
+                                            val file = withContext(Dispatchers.IO) {
+                                                val txt = OfflineDocumentConverter.convertPdfToTxt(context, selectedUri!!, selectedDocName).readText()
+                                                DocmoDocumentBridge.exportExtractedPdfTextToXlsx(context, selectedDocName, txt)
+                                            }
+                                            resultFile = file
+                                            resultMessage = "تم تصدير نص PDF إلى مصنف Excel (.xlsx) بنجاح!"
+                                            isProcessing = false
+                                        }
+                                    }
+                                )
+                            }
+
+                            // 4. Export Extracted PDF Text to CSV (UTF-8 BOM)
+                            item {
+                                ConversionActionCard(
+                                    title = "تصدير نص PDF المستخرج إلى جدول CSV (متوافق مع العربية)",
+                                    description = "حفظ كل سطر مع رقم الصفحة بترميز UTF-8 BOM لفتحه مباشرة في Excel.",
+                                    icon = Icons.Default.GridOn,
+                                    iconTint = Color(0xFF0D9488),
+                                    enabled = selectedUri != null,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            isProcessing = true
+                                            processingStatusMessage = "جارٍ تجهيز ملف CSV مع ترميز العربية..."
+                                            val file = withContext(Dispatchers.IO) {
+                                                val txt = OfflineDocumentConverter.convertPdfToTxt(context, selectedUri!!, selectedDocName).readText()
+                                                DocmoDocumentBridge.exportExtractedPdfTextToCsv(context, selectedDocName, txt)
+                                            }
+                                            resultFile = file
+                                            resultMessage = "تم حفظ ملف CSV بنجاح مع دعم كامل للنص العربي!"
+                                            isProcessing = false
+                                        }
+                                    }
+                                )
+                            }
+
+                            // 5. Convert CSV to Excel (.xlsx)
+                            item {
+                                ConversionActionCard(
+                                    title = "تحويل ملف CSV إلى مصنف Excel (.xlsx) رسمي",
+                                    description = "تحويل جميع صفوف وأعمدة ملف CSV إلى ورقة عمل Excel (.xlsx) واحدة محليًا.",
+                                    icon = Icons.Default.Dataset,
+                                    iconTint = Color(0xFF16A34A),
+                                    enabled = selectedUri != null,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            isProcessing = true
+                                            processingStatusMessage = "جارٍ قراءة صفوف CSV وتوليد مصنف Excel (.xlsx)..."
+                                            val file = withContext(Dispatchers.IO) {
+                                                val sheet = MultiFormatDocumentEngine.parseSpreadsheet(context, selectedUri!!, "csv")
+                                                DocmoDocumentBridge.exportRowsToXlsx(
+                                                    context = context,
+                                                    baseName = selectedDocName,
+                                                    headers = sheet.headers,
+                                                    rows = sheet.rows,
+                                                    suffix = ""
+                                                )
+                                            }
+                                            resultFile = file
+                                            resultMessage = "تم تحويل ملف CSV إلى مصنف Excel (.xlsx) بنجاح!"
+                                            isProcessing = false
+                                        }
+                                    }
+                                )
+                            }
+
+                            // 6. Inspect & Backup Microsoft Access (.mdb / .accdb)
+                            item {
+                                ConversionActionCard(
+                                    title = "فحص وحفظ نسخة من قاعدة بيانات Microsoft Access (.mdb / .accdb)",
+                                    description = "فحص ترويسة Standard Jet/ACE DB محليًا وإنشاء نسخة احتياطية مطابقة.",
+                                    icon = Icons.Default.Storage,
+                                    iconTint = Color(0xFF9333EA),
+                                    enabled = selectedUri != null,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            isProcessing = true
+                                            processingStatusMessage = "جارٍ فحص ترويسة ملف Access وحفظ نسخة مطابقة..."
+                                            val (info, copyFile) = withContext(Dispatchers.IO) {
+                                                val inf = DocmoDocumentBridge.inspectAccessDatabase(context, selectedUri!!, selectedDocName)
+                                                val cp = DocmoDocumentBridge.createAccessBackupCopy(context, selectedUri!!, selectedDocName)
+                                                inf to cp
+                                            }
+                                            resultFile = copyFile
+                                            resultMessage = "${info.noticeMessage} — تم تجهيز النسخة (${copyFile.name})"
+                                            isProcessing = false
+                                        }
+                                    }
+                                )
+                            }
+
+                            // 7. Open Selected Document in External Android App
+                            item {
+                                ConversionActionCard(
+                                    title = "فتح المستند في تطبيق خارجي على الهاتف (Open External)",
+                                    description = "إرسال المستند الحالي (PDF, Word, Excel, PowerPoint, CSV) إلى العارض المثبت على جهازك.",
+                                    icon = Icons.Default.OpenInNew,
+                                    iconTint = Color(0xFF4F46E5),
+                                    enabled = selectedUri != null,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            val res = withContext(Dispatchers.IO) {
+                                                if (selectedDocName.lowercase().endsWith(".pdf")) {
+                                                    DocmoDocumentBridge.openPdfFromUri(context, selectedUri!!, selectedDocName)
+                                                } else {
+                                                    DocmoDocumentBridge.openDocumentFromUri(context, selectedUri!!, selectedDocName)
+                                                }
+                                            }
+                                            if (res.isFailure) {
+                                                Toast.makeText(
+                                                    context,
+                                                    res.exceptionOrNull()?.message ?: "تعذر فتح المستند خارجيًا",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
                         "SECURITY" -> {
                             item {
                                 Text("أمان وتشفير المستندات:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = theme.textColor)
@@ -1106,6 +1381,13 @@ fun DocumentToolsAndConverterDialog(
                 }
             }
         }
+    }
+
+    if (showDocmoWebStudioDialog) {
+        DocmoStudioWebViewDialog(
+            theme = theme,
+            onDismiss = { showDocmoWebStudioDialog = false }
+        )
     }
 }
 

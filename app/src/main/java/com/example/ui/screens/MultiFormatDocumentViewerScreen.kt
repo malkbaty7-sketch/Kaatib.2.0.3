@@ -50,14 +50,20 @@ import com.example.data.model.ReaderTheme
 import com.example.ui.MainViewModel
 import com.example.ui.components.ReaderSettingsBar
 import com.example.ui.components.ReaderSettingsBottomSheet
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.util.AccessDatabaseInfo
+import com.example.util.DocmoDocumentBridge
 import com.example.util.DocumentBookmarkItem
 import com.example.util.EpubBookContent
 import com.example.util.MultiFormatDocumentEngine
+import com.example.util.PdfDiagnosticReport
 import com.example.util.PptxPresentationContent
 import com.example.util.SpreadsheetContent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -129,6 +135,33 @@ fun MultiFormatDocumentViewerScreen(
 
     // Spreadsheet (XLSX / CSV)
     var spreadsheetData by remember { mutableStateOf<SpreadsheetContent?>(null) }
+
+    // DOCMO Integrated States (Access DB, PDF Diagnostics, DOCX Interactive Edit, SAF Save)
+    var accessDatabaseInfo by remember { mutableStateOf<AccessDatabaseInfo?>(null) }
+    var pdfDiagnosticReport by remember { mutableStateOf<PdfDiagnosticReport?>(null) }
+    var showPdfDiagnosticDialog by remember { mutableStateOf(false) }
+    var isDocxEditingMode by remember { mutableStateOf(false) }
+    var editableDocxParagraphs by remember { mutableStateOf<List<String>>(emptyList()) }
+    var pendingFileToSave by remember { mutableStateOf<File?>(null) }
+
+    val saveToDeviceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { destUri: Uri? ->
+        val srcFile = pendingFileToSave
+        pendingFileToSave = null
+        if (destUri != null && srcFile != null) {
+            coroutineScope.launch {
+                val res = withContext(Dispatchers.IO) {
+                    DocmoDocumentBridge.saveFileToDestinationUri(context, destUri, srcFile)
+                }
+                if (res.isSuccess) {
+                    Toast.makeText(context, "تم حفظ ${srcFile.name} في الموقع المختار بنجاح", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, res.exceptionOrNull()?.message ?: "تعذر حفظ الملف", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     var isLoading by remember { mutableStateOf(true) }
 
@@ -231,6 +264,9 @@ fun MultiFormatDocumentViewerScreen(
                 "xlsx", "xls", "csv", "tsv" -> {
                     spreadsheetData = MultiFormatDocumentEngine.parseSpreadsheet(context, uri, extension)
                 }
+                "mdb", "accdb" -> {
+                    accessDatabaseInfo = DocmoDocumentBridge.inspectAccessDatabase(context, uri, fileName)
+                }
                 "docx" -> {
                     val paragraphs = com.example.util.DocxExtractor.extractParagraphs(context, uri)
                     docxParagraphs = paragraphs
@@ -238,6 +274,11 @@ fun MultiFormatDocumentViewerScreen(
                         paragraphs.joinToString("\n\n") { it.text }
                     } else {
                         MultiFormatDocumentEngine.parseTextDocument(context, uri, extension)
+                    }
+                    editableDocxParagraphs = if (paragraphs.isNotEmpty()) {
+                        paragraphs.map { it.text }
+                    } else {
+                        textDocumentContent.split("\n\n").filter { it.isNotBlank() }
                     }
                 }
                 else -> {
@@ -399,6 +440,54 @@ fun MultiFormatDocumentViewerScreen(
                         IconButton(onClick = { showEpubChaptersSheet = true }) {
                             Icon(Icons.Default.MenuBook, contentDescription = "فهرس الفصول", tint = readerTheme.text)
                         }
+                    }
+
+                    // DOCMO Local PDF Diagnostic button
+                    if (extension == "pdf") {
+                        IconButton(onClick = {
+                            coroutineScope.launch {
+                                val report = withContext(Dispatchers.IO) {
+                                    DocmoDocumentBridge.inspectPdfLocally(context, uri, fileName)
+                                }
+                                pdfDiagnosticReport = report
+                                showPdfDiagnosticDialog = true
+                            }
+                        }) {
+                            Icon(Icons.Default.Verified, contentDescription = "فحص PDF محلي", tint = Color(0xFF0284C7))
+                        }
+                    }
+
+                    // DOCMO Interactive Word (DOCX) Edit toggle
+                    if (extension == "docx") {
+                        IconButton(onClick = { isDocxEditingMode = !isDocxEditingMode }) {
+                            Icon(
+                                imageVector = Icons.Default.EditNote,
+                                contentDescription = "تعديل وحفظ نسخة Word جديدة",
+                                tint = if (isDocxEditingMode) Color(0xFF2563EB) else readerTheme.text
+                            )
+                        }
+                    }
+
+                    // DOCMO Open in External Viewer
+                    IconButton(onClick = {
+                        coroutineScope.launch {
+                            val res = withContext(Dispatchers.IO) {
+                                if (extension == "pdf") {
+                                    DocmoDocumentBridge.openPdfFromUri(context, uri, fileName)
+                                } else {
+                                    DocmoDocumentBridge.openDocumentFromUri(context, uri, fileName)
+                                }
+                            }
+                            if (res.isFailure) {
+                                Toast.makeText(
+                                    context,
+                                    res.exceptionOrNull()?.message ?: "تعذر فتح المستند في تطبيق خارجي",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    }) {
+                        Icon(Icons.Default.OpenInNew, contentDescription = "فتح في تطبيق خارجي", tint = readerTheme.text)
                     }
 
                     // 5. Format Settings (Font, theme, margins, eye-care)
@@ -781,13 +870,110 @@ fun MultiFormatDocumentViewerScreen(
                         if (data != null && data.headers.isNotEmpty()) {
                             SpreadsheetGridView(
                                 data = data,
+                                extension = extension,
+                                fileName = fileName,
                                 searchQuery = searchQuery,
                                 theme = theme,
-                                readerTheme = readerTheme
+                                readerTheme = readerTheme,
+                                onUpdateCell = { rowIdx, colIdx, newValue ->
+                                    val updatedRows = data.rows.mapIndexed { rIdx, row ->
+                                        if (rIdx == rowIdx) {
+                                            val padded = (0 until maxOf(row.size, colIdx + 1)).map { cIdx ->
+                                                if (cIdx == colIdx) newValue else row.getOrElse(cIdx) { "" }
+                                            }
+                                            padded
+                                        } else row
+                                    }
+                                    spreadsheetData = data.copy(rows = updatedRows)
+                                },
+                                onExportXlsx = { isCsvConversion ->
+                                    coroutineScope.launch {
+                                        val suffix = if (isCsvConversion) "" else "-edited"
+                                        val outFile = withContext(Dispatchers.IO) {
+                                            DocmoDocumentBridge.exportRowsToXlsx(
+                                                context = context,
+                                                baseName = fileName,
+                                                headers = data.headers,
+                                                rows = data.rows,
+                                                suffix = suffix
+                                            )
+                                        }
+                                        pendingFileToSave = outFile
+                                        saveToDeviceLauncher.launch(outFile.name)
+                                    }
+                                }
                             )
                         } else {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text("جدول البيانات فارغ أو تعذر تحليله.", color = Color.Gray)
+                            }
+                        }
+                    }
+                    "mdb", "accdb" -> {
+                        val info = accessDatabaseInfo
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = readerTheme.surface)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        text = "معلومات قاعدة بيانات Microsoft Access",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = readerTheme.text
+                                    )
+                                    Text("الصيغة: ${info?.format ?: extension.uppercase()}", fontSize = 13.sp, color = readerTheme.text)
+                                    Text("الحجم: ${String.format("%.1f", (info?.sizeBytes ?: 0L) / 1024f)} كيلوبايت", fontSize = 13.sp, color = readerTheme.text)
+                                    Text("ترويسة الملف: ${info?.signature ?: "غير معروف"}", fontSize = 13.sp, color = theme.primaryColor, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "فحص الترويسة: ${if (info?.recognized == true) "تطابق مبدئي" else "لم يتم تأكيد الصيغة"}",
+                                        fontSize = 13.sp,
+                                        color = if (info?.recognized == true) Color(0xFF059669) else Color(0xFFD97706),
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    Surface(
+                                        color = Color(0xFFFEF3C7),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "تفحص هذه الأداة ترويسة ملف قاعدة البيانات محليًا على الجهاز دون تعديل الملف الأصلي. يمكنك حفظ نسخة احتياطية مطابقة من ملف Access.",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF92400E),
+                                            modifier = Modifier.padding(14.dp)
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val copyFile = withContext(Dispatchers.IO) {
+                                                    DocmoDocumentBridge.createAccessBackupCopy(context, uri, fileName)
+                                                }
+                                                pendingFileToSave = copyFile
+                                                saveToDeviceLauncher.launch(copyFile.name)
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                                    ) {
+                                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("حفظ نسخة من ملف Access", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
                     }
@@ -799,6 +985,53 @@ fun MultiFormatDocumentViewerScreen(
                                 .verticalScroll(textScrollState)
                                 .padding(horizontal = 20.dp, vertical = 14.dp)
                         ) {
+                            if (extension == "docx") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    FilterChip(
+                                        selected = isDocxEditingMode,
+                                        onClick = { isDocxEditingMode = !isDocxEditingMode },
+                                        label = {
+                                            Text(
+                                                if (isDocxEditingMode) "وضع تعديل فقرات Word مفعّل ✏️" else "تفعيل تعديل فقرات Word",
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    )
+
+                                    if (isDocxEditingMode) {
+                                        Button(
+                                            onClick = {
+                                                coroutineScope.launch {
+                                                    val outFile = withContext(Dispatchers.IO) {
+                                                        DocmoDocumentBridge.exportEditedDocxParagraphs(
+                                                            context = context,
+                                                            baseName = fileName,
+                                                            paragraphs = editableDocxParagraphs
+                                                        )
+                                                    }
+                                                    textDocumentContent = editableDocxParagraphs.joinToString("\n\n")
+                                                    pendingFileToSave = outFile
+                                                    saveToDeviceLauncher.launch(outFile.name)
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(15.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("حفظ نسخة Word جديدة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
                             if (searchQuery.isNotBlank()) {
                                 val matchCount = countMatches(textDocumentContent, searchQuery)
                                 Surface(
@@ -816,7 +1049,23 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             }
 
-                            if (docxParagraphs.isNotEmpty()) {
+                            if (extension == "docx" && isDocxEditingMode) {
+                                editableDocxParagraphs.forEachIndexed { idx, paraText ->
+                                    OutlinedTextField(
+                                        value = paraText,
+                                        onValueChange = { updated ->
+                                            editableDocxParagraphs = editableDocxParagraphs.toMutableList().also {
+                                                it[idx] = updated
+                                            }
+                                        },
+                                        label = { Text("الفقرة ${idx + 1}", fontSize = 10.sp) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                }
+                            } else if (docxParagraphs.isNotEmpty()) {
                                 docxParagraphs.forEach { para ->
                                     if (para.isHeading) {
                                         Text(
@@ -979,6 +1228,52 @@ fun MultiFormatDocumentViewerScreen(
             onDismiss = { showConverterStudioDialog = false }
         )
     }
+
+    // DOCMO Local PDF Diagnostic Report Dialog
+    if (showPdfDiagnosticDialog && pdfDiagnosticReport != null) {
+        val rep = pdfDiagnosticReport!!
+        AlertDialog(
+            onDismissRequest = { showPdfDiagnosticDialog = false },
+            title = {
+                Text("فحص PDF محلي (DOCMO) 🔍", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "الملف: ${rep.fileName}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.primaryColor
+                    )
+                    rep.findings.forEach { finding ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF0284C7),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(finding, fontSize = 12.sp)
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text(
+                        text = "هذا الفحص يتم محليًا 100% على جهازك دون رفع الملف إلى أي خادم.",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showPdfDiagnosticDialog = false }) {
+                    Text("إغلاق")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1046,17 +1341,24 @@ private fun PdfPageView(
 @Composable
 private fun SpreadsheetGridView(
     data: SpreadsheetContent,
+    extension: String,
+    fileName: String,
     searchQuery: String,
     theme: AppThemeData,
-    readerTheme: ReaderTheme
+    readerTheme: ReaderTheme,
+    onUpdateCell: (rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
+    onExportXlsx: (isCsvConversion: Boolean) -> Unit
 ) {
     val horizontalScrollState = rememberScrollState()
-    val filteredRows = remember(searchQuery, data.rows) {
+    var editingCell by remember { mutableStateOf<Triple<Int, Int, String>?>(null) }
+
+    val indexedFilteredRows = remember(searchQuery, data.rows) {
+        val indexed = data.rows.mapIndexed { idx, row -> idx to row }
         if (searchQuery.isBlank()) {
-            data.rows
+            indexed
         } else {
             val q = searchQuery.trim().lowercase()
-            data.rows.filter { row -> row.any { it.lowercase().contains(q) } }
+            indexed.filter { (_, row) -> row.any { it.lowercase().contains(q) } }
         }
     }
 
@@ -1065,12 +1367,42 @@ private fun SpreadsheetGridView(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(readerTheme.surface)
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(data.sheetName, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = theme.primaryColor)
-            Text("إجمالي: ${filteredRows.size} صف • ${data.headers.size} عمود", fontSize = 10.sp, color = Color.Gray)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(data.sheetName, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = theme.primaryColor)
+                Text(
+                    "إجمالي: ${indexedFilteredRows.size} صف • ${data.headers.size} عمود • اضغط على أي خلية لتعديلها",
+                    fontSize = 10.sp,
+                    color = Color.Gray
+                )
+            }
+
+            if (extension in listOf("csv", "tsv")) {
+                Button(
+                    onClick = { onExportXlsx(true) },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("تحويل CSV إلى Excel وحفظه", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = { onExportXlsx(false) },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("حفظ نسخة Excel جديدة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
         Box(
@@ -1114,15 +1446,15 @@ private fun SpreadsheetGridView(
                     }
                 }
 
-                itemsIndexed(filteredRows) { index, row ->
-                    val isEven = index % 2 == 0
+                itemsIndexed(indexedFilteredRows) { displayIdx, (originalRowIdx, row) ->
+                    val isEven = displayIdx % 2 == 0
                     Row(
                         modifier = Modifier
                             .background(if (isEven) readerTheme.bg else readerTheme.surface)
                             .border(0.5.dp, Color.LightGray.copy(alpha = 0.3f))
                     ) {
                         Text(
-                            text = "${index + 1}",
+                            text = "${originalRowIdx + 1}",
                             fontSize = 10.sp,
                             color = Color.Gray,
                             modifier = Modifier
@@ -1138,6 +1470,9 @@ private fun SpreadsheetGridView(
                                 color = readerTheme.text,
                                 modifier = Modifier
                                     .width(130.dp)
+                                    .clickable {
+                                        editingCell = Triple(originalRowIdx, colIdx, cellValue)
+                                    }
                                     .padding(8.dp)
                                     .border(0.5.dp, Color.LightGray.copy(alpha = 0.2f)),
                                 textAlign = TextAlign.Start,
@@ -1149,6 +1484,40 @@ private fun SpreadsheetGridView(
                 }
             }
         }
+    }
+
+    if (editingCell != null) {
+        val (rIdx, cIdx, initialVal) = editingCell!!
+        var currentInput by remember(editingCell) { mutableStateOf(initialVal) }
+        val colName = data.headers.getOrElse(cIdx) { "العمود ${cIdx + 1}" }
+
+        AlertDialog(
+            onDismissRequest = { editingCell = null },
+            title = {
+                Text("تعديل الخلية (الصف ${rIdx + 1} • $colName)", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                OutlinedTextField(
+                    value = currentInput,
+                    onValueChange = { currentInput = it },
+                    label = { Text("قيمة الخلية") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    onUpdateCell(rIdx, cIdx, currentInput)
+                    editingCell = null
+                }) {
+                    Text("تحديث الخلية")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingCell = null }) {
+                    Text("إلغاء")
+                }
+            }
+        )
     }
 }
 

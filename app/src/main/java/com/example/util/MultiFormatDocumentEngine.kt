@@ -76,9 +76,9 @@ object MultiFormatDocumentEngine {
     fun detectCategory(extension: String): DocumentCategory {
         return when (extension.lowercase()) {
             "pdf", "epub" -> DocumentCategory.BOOKS
-            "docx", "doc", "txt", "rtf", "html", "htm", "md" -> DocumentCategory.DOCUMENTS
-            "xlsx", "xls", "csv", "tsv" -> DocumentCategory.SHEETS
-            "pptx", "ppt" -> DocumentCategory.PRESENTATIONS
+            "docx", "doc", "txt", "rtf", "html", "htm", "md", "odt" -> DocumentCategory.DOCUMENTS
+            "xlsx", "xls", "csv", "tsv", "ods", "mdb", "accdb" -> DocumentCategory.SHEETS
+            "pptx", "ppt", "odp" -> DocumentCategory.PRESENTATIONS
             else -> DocumentCategory.DOCUMENTS
         }
     }
@@ -743,7 +743,7 @@ object MultiFormatDocumentEngine {
     ) {
         if (maxDepth <= 0) return
         val files = dir.listFiles() ?: return
-        val validExts = setOf("pdf", "epub", "docx", "doc", "txt", "rtf", "html", "htm", "xlsx", "xls", "csv", "pptx", "ppt", "md")
+        val validExts = setOf("pdf", "epub", "docx", "doc", "txt", "rtf", "html", "htm", "xlsx", "xls", "csv", "tsv", "pptx", "ppt", "md", "mdb", "accdb", "odt", "ods", "odp")
 
         for (file in files) {
             if (file.isDirectory && !file.name.startsWith(".")) {

@@ -24,6 +24,14 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Set up Android SDK & Accept Licenses
+        uses: android-actions/setup-android@v3
+
+      - name: Accept all Android SDK licenses
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -89,17 +97,37 @@ jobs:
           echo "KEY_PASSWORD=${KEY_PASS}" >> "$GITHUB_ENV"
           echo "KEY_ALIAS=upload" >> "$GITHUB_ENV"
 
-      - name: Build Signed Release APK
-        run: gradle assembleRelease --no-daemon --stacktrace
+      - name: Build Signed Release APK & Debug APK
+        run: gradle assembleRelease assembleDebug -x lintVitalRelease --no-daemon --stacktrace
 
-      - name: Copy APK with friendly filename
+      - name: Copy APKs with friendly filenames
         shell: bash
         run: |
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/katib-release-signed.apk
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/katib-debug.apk
 
       - name: Upload Signed Release APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: katib-release-signed-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: |
+            app/build/outputs/apk/release/katib-release-signed.apk
+            app/build/outputs/apk/debug/katib-debug.apk
           if-no-files-found: error
+
+      - name: Publish APK to GitHub Releases (Direct Download)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: "تطبيق كاتب (Katib) - أحدث نسخة APK جاهزة للتحميل"
+          body: |
+            ### تحميل تطبيق كاتب (Katib) للأندرويد 📱
+            - **نسخة الإصدار النهائي الموقعة (موصى بها):** `katib-release-signed.apk`
+            - **النسخة التجريبية:** `katib-debug.apk`
+          prerelease: false
+          files: |
+            app/build/outputs/apk/release/katib-release-signed.apk
+            app/build/outputs/apk/debug/katib-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

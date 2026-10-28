@@ -80,6 +80,7 @@ fun DeviceDocumentsScreen(
     // Converter Studio Dialog
     var showConverterDialog by remember { mutableStateOf(false) }
     var targetDocForConverter by remember { mutableStateOf<ScannedDocumentItem?>(null) }
+    var showDocmoStudioDialog by remember { mutableStateOf(false) }
 
     val allProgressList by viewModel.allDocumentProgress.collectAsState(initial = emptyList())
     val progressMap = remember(allProgressList) {
@@ -314,6 +315,14 @@ fun DeviceDocumentsScreen(
                                     showConverterDialog = true
                                 },
                                 leadingIcon = { Icon(Icons.Default.Transform, contentDescription = null, tint = theme.primaryColor) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("استوديو DOCMO المتكامل للمستندات 💎", fontSize = 13.sp) },
+                                onClick = {
+                                    showTopMoreMenu = false
+                                    showDocmoStudioDialog = true
+                                },
+                                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF2563EB)) }
                             )
                         }
                     }
@@ -687,6 +696,13 @@ fun DeviceDocumentsScreen(
             onSelectSort = { sortBy = it }
         )
     }
+
+    if (showDocmoStudioDialog) {
+        DocmoStudioWebViewDialog(
+            theme = theme,
+            onDismiss = { showDocmoStudioDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -702,9 +718,10 @@ private fun DocumentItemCard(
     val badgeColor = when (ext) {
         "PDF" -> Color(0xFFEF4444)
         "EPUB" -> Color(0xFF8B5CF6)
-        "DOCX", "DOC" -> Color(0xFF2563EB)
-        "XLSX", "XLS", "CSV" -> Color(0xFF10B981)
-        "PPTX", "PPT" -> Color(0xFFD97706)
+        "DOCX", "DOC", "ODT" -> Color(0xFF2563EB)
+        "XLSX", "XLS", "CSV", "TSV", "ODS" -> Color(0xFF10B981)
+        "MDB", "ACCDB" -> Color(0xFF9333EA)
+        "PPTX", "PPT", "ODP" -> Color(0xFFD97706)
         "HTML", "HTM" -> Color(0xFFF97316)
         "PNG", "JPG", "JPEG", "WEBP" -> Color(0xFF7C3AED)
         else -> Color(0xFF64748B)
@@ -712,9 +729,10 @@ private fun DocumentItemCard(
 
     val iconVector = when (ext) {
         "PDF", "EPUB" -> Icons.Default.MenuBook
-        "DOCX", "DOC", "TXT", "RTF" -> Icons.Default.Description
-        "XLSX", "XLS", "CSV" -> Icons.Default.TableChart
-        "PPTX", "PPT" -> Icons.Default.Slideshow
+        "DOCX", "DOC", "TXT", "RTF", "ODT" -> Icons.Default.Description
+        "XLSX", "XLS", "CSV", "TSV", "ODS" -> Icons.Default.TableChart
+        "MDB", "ACCDB" -> Icons.Default.Storage
+        "PPTX", "PPT", "ODP" -> Icons.Default.Slideshow
         "PNG", "JPG", "JPEG", "WEBP" -> Icons.Default.Image
         else -> Icons.Default.Article
     }
