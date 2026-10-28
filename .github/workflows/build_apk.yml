@@ -24,13 +24,25 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Set up Android SDK & Accept Licenses
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept all Android SDK licenses
+      - name: Install Android SDK 36 / 36.1 & Build Tools
         shell: bash
         run: |
           yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "build-tools;36.0.0" "platforms;android-36" "platforms;android-36.1" || \
+          sdkmanager --channel=3 "build-tools;36.0.0" "platforms;android-36" "platforms;android-36.1" || true
+          SDK_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -n "$SDK_DIR" ] && [ ! -d "${SDK_DIR}/platforms/android-36.1" ]; then
+            if [ -d "${SDK_DIR}/platforms/android-36" ]; then
+              sed -i 's/compileSdk { version = release(36) { minorApiLevel = 1 } }/compileSdk = 36/g' app/build.gradle.kts
+            else
+              sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
+              sed -i 's/compileSdk { version = release(36) { minorApiLevel = 1 } }/compileSdk = 35/g' app/build.gradle.kts
+              sed -i 's/targetSdk = 36/targetSdk = 35/g' app/build.gradle.kts
+            fi
+          fi
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
@@ -55,7 +67,7 @@ jobs:
         run: |
           if [ ! -f "debug.keystore" ]; then
             if [ -f "debug.keystore.base64" ]; then
-              base64 --decode debug.keystore.base64 > debug.keystore
+              tr -d '[:space:]' < debug.keystore.base64 | base64 --decode > debug.keystore
             else
               keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey \
                 -keyalg RSA -keysize 2048 -validity 10000 \
@@ -73,14 +85,14 @@ jobs:
         run: |
           KEYSTORE_FILE="${GITHUB_WORKSPACE}/my-upload-key.jks"
           if [ -n "${SECRET_KEYSTORE_BASE64:-}" ]; then
-            printf '%s' "$SECRET_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+            printf '%s' "$SECRET_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$KEYSTORE_FILE"
             STORE_PASS="${SECRET_STORE_PASSWORD:-katib2026}"
             KEY_PASS="${SECRET_KEY_PASSWORD:-katib2026}"
           elif [ -f "$KEYSTORE_FILE" ]; then
             STORE_PASS="${SECRET_STORE_PASSWORD:-katib2026}"
             KEY_PASS="${SECRET_KEY_PASSWORD:-katib2026}"
           elif [ -f "${GITHUB_WORKSPACE}/my-upload-key.jks.base64" ]; then
-            base64 --decode "${GITHUB_WORKSPACE}/my-upload-key.jks.base64" > "$KEYSTORE_FILE"
+            tr -d '[:space:]' < "${GITHUB_WORKSPACE}/my-upload-key.jks.base64" | base64 --decode > "$KEYSTORE_FILE"
             STORE_PASS="${SECRET_STORE_PASSWORD:-katib2026}"
             KEY_PASS="${SECRET_KEY_PASSWORD:-katib2026}"
           else
@@ -98,7 +110,10 @@ jobs:
           echo "KEY_ALIAS=upload" >> "$GITHUB_ENV"
 
       - name: Build Signed Release APK & Debug APK
-        run: gradle assembleRelease assembleDebug -x lintVitalRelease --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=2g -Dfile.encoding=UTF-8"
+        run: |
+          gradle assembleRelease assembleDebug -x lintVitalRelease --no-daemon --no-configuration-cache --stacktrace
 
       - name: Copy APKs with friendly filenames
         shell: bash
@@ -117,6 +132,7 @@ jobs:
 
       - name: Publish APK to GitHub Releases (Direct Download)
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
