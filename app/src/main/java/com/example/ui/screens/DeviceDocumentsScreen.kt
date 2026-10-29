@@ -56,7 +56,8 @@ fun DeviceDocumentsScreen(
     theme: AppThemeData,
     viewModel: MainViewModel,
     onBack: () -> Unit,
-    onOpenDocument: (uriString: String, fileName: String) -> Unit
+    onOpenDocument: (uriString: String, fileName: String) -> Unit,
+    isMainTab: Boolean = false
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -193,142 +194,165 @@ fun DeviceDocumentsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "مدير المستندات",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Black,
-                                color = theme.textColor
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = theme.primaryColor.copy(alpha = 0.12f)
+            Surface(
+                color = theme.surfaceColor,
+                shadowElevation = 2.dp,
+                modifier = if (isMainTab) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().statusBarsPadding()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (!isMainTab) {
+                            IconButton(
+                                onClick = onBack,
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                Text(
-                                    text = "${filteredList.size} ملف",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = theme.primaryColor,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "رجوع",
+                                    tint = theme.primaryColor,
+                                    modifier = Modifier.size(18.dp)
                                 )
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(theme.primaryColor),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
                             }
                         }
                         Text(
-                            text = "تصفح، قراءة وتحويل محلي بدون إنترنت",
-                            fontSize = 10.sp,
-                            color = Color.Gray
+                            text = "عارض ومدير المستندات",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Black,
+                            color = theme.textColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "رجوع",
-                            tint = theme.primaryColor
-                        )
-                    }
-                },
-                actions = {
-                    // View Toggle (List vs Grid) - 48dp touch target
-                    IconButton(
-                        onClick = { isGridView = !isGridView },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isGridView) Icons.Default.ViewList else Icons.Default.GridView,
-                            contentDescription = "تبديل طريقة العرض",
-                            tint = theme.primaryColor
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = theme.primaryColor.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "${filteredList.size} ملف",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = theme.primaryColor,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
                     }
 
-                    // Sort Trigger - 48dp touch target
-                    IconButton(
-                        onClick = { showSortBottomSheet = true },
-                        modifier = Modifier.size(48.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Sort,
-                            contentDescription = "ترتيب وفرز",
-                            tint = theme.primaryColor
-                        )
-                    }
-
-                    // Converter Studio Quick Access
-                    IconButton(
-                        onClick = {
-                            targetDocForConverter = null
-                            showConverterDialog = true
-                        },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.AutoFixHigh,
-                            contentDescription = "محول وأمان المستندات",
-                            tint = theme.primaryColor
-                        )
-                    }
-
-                    // Overflow Menu for Mobile
-                    Box {
                         IconButton(
-                            onClick = { showTopMoreMenu = true },
-                            modifier = Modifier.size(48.dp)
+                            onClick = { isGridView = !isGridView },
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = "خيارات إضافية",
-                                tint = theme.primaryColor
+                                imageVector = if (isGridView) Icons.Default.ViewList else Icons.Default.GridView,
+                                contentDescription = "تبديل طريقة العرض",
+                                tint = theme.primaryColor,
+                                modifier = Modifier.size(17.dp)
                             )
                         }
-                        DropdownMenu(
-                            expanded = showTopMoreMenu,
-                            onDismissRequest = { showTopMoreMenu = false }
+
+                        IconButton(
+                            onClick = { showSortBottomSheet = true },
+                            modifier = Modifier.size(32.dp)
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("إعادة فحص الذاكرة 🔄", fontSize = 13.sp) },
-                                onClick = {
-                                    showTopMoreMenu = false
-                                    startAutoScan()
-                                },
-                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null, tint = theme.primaryColor) }
+                            Icon(
+                                Icons.Default.Sort,
+                                contentDescription = "ترتيب وفرز",
+                                tint = theme.primaryColor,
+                                modifier = Modifier.size(17.dp)
                             )
-                            DropdownMenuItem(
-                                text = { Text("إنشاء مجلد جديد 📁", fontSize = 13.sp) },
-                                onClick = {
-                                    showTopMoreMenu = false
-                                    showNewFolderDialog = true
-                                },
-                                leadingIcon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null, tint = theme.primaryColor) }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                targetDocForConverter = null
+                                showConverterDialog = true
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.AutoFixHigh,
+                                contentDescription = "محول وأمان المستندات",
+                                tint = theme.primaryColor,
+                                modifier = Modifier.size(17.dp)
                             )
-                            DropdownMenuItem(
-                                text = { Text("أدوات التحويل والتشكيل (Tashkeel) ⚡", fontSize = 13.sp) },
-                                onClick = {
-                                    showTopMoreMenu = false
-                                    targetDocForConverter = null
-                                    showConverterDialog = true
-                                },
-                                leadingIcon = { Icon(Icons.Default.Transform, contentDescription = null, tint = theme.primaryColor) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("استوديو DOCMO المتكامل للمستندات 💎", fontSize = 13.sp) },
-                                onClick = {
-                                    showTopMoreMenu = false
-                                    showDocmoStudioDialog = true
-                                },
-                                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF2563EB)) }
-                            )
+                        }
+
+                        Box {
+                            IconButton(
+                                onClick = { showTopMoreMenu = true },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = "خيارات إضافية",
+                                    tint = theme.primaryColor,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showTopMoreMenu,
+                                onDismissRequest = { showTopMoreMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("إعادة فحص الذاكرة 🔄", fontSize = 12.sp) },
+                                    onClick = {
+                                        showTopMoreMenu = false
+                                        startAutoScan()
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(16.dp)) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("إنشاء مجلد جديد 📁", fontSize = 12.sp) },
+                                    onClick = {
+                                        showTopMoreMenu = false
+                                        showNewFolderDialog = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.CreateNewFolder, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(16.dp)) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("أدوات التحويل والتشكيل (Tashkeel) ⚡", fontSize = 12.sp) },
+                                    onClick = {
+                                        showTopMoreMenu = false
+                                        targetDocForConverter = null
+                                        showConverterDialog = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.Transform, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(16.dp)) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("استوديو DOCMO المتكامل للمستندات 💎", fontSize = 12.sp) },
+                                    onClick = {
+                                        showTopMoreMenu = false
+                                        showDocmoStudioDialog = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp)) }
+                                )
+                            }
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
+                }
+            }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -352,14 +376,14 @@ fun DeviceDocumentsScreen(
                 },
                 containerColor = theme.primaryColor,
                 contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
-                    .navigationBarsPadding()
-                    .shadow(8.dp, RoundedCornerShape(16.dp))
+                    .height(40.dp)
+                    .shadow(6.dp, RoundedCornerShape(14.dp))
             ) {
-                Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("تصفح واختيار ملف 📂", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("تصفح ملف 📂", fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
         },
         containerColor = theme.surfaceColor
@@ -368,119 +392,135 @@ fun DeviceDocumentsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            // Mobile Search Input
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 50.dp),
-                placeholder = { Text("بحث عن اسم ملف، كتاب، أو صيغة...", fontSize = 12.sp, color = Color.Gray) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(20.dp)) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Default.Clear, contentDescription = "مسح البحث", tint = Color.Gray, modifier = Modifier.size(18.dp))
+            // Compact Search Input + Folders Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.weight(1f).height(34.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(15.dp))
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = theme.textColor),
+                            modifier = Modifier.weight(1f),
+                            decorationBox = { innerTextField ->
+                                if (searchQuery.isEmpty()) {
+                                    Text("بحث سريع عن ملف أو كتاب...", fontSize = 11.sp, color = Color.Gray)
+                                }
+                                innerTextField()
+                            }
+                        )
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(22.dp)) {
+                                Icon(Icons.Default.Clear, contentDescription = "مسح البحث", tint = Color.Gray, modifier = Modifier.size(13.dp))
+                            }
                         }
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = theme.primaryColor,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White
-                )
-            )
+                }
 
-            // Folders Row with "+ New Folder" chip
+                // Compact New Folder Button
+                Surface(
+                    onClick = { showNewFolderDialog = true },
+                    shape = RoundedCornerShape(8.dp),
+                    color = theme.primaryColor.copy(alpha = 0.08f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.3f)),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    ) {
+                        Icon(Icons.Default.CreateNewFolder, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(13.dp))
+                        Text("مجلد+", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                    }
+                }
+            }
+
+            // Compact Folders & Category Filter Chips Row
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 items(customFolders) { folder ->
                     val isSelected = selectedFolder == folder
                     val count = folderCounts[folder] ?: 0
-                    FilterChip(
-                        selected = isSelected,
+                    Surface(
                         onClick = { selectedFolder = folder },
-                        label = {
-                            Text(
-                                text = if (folder == "الكل") "الكل ($count)" else "$folder ($count)",
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        leadingIcon = {
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) Color(0xFF1E293B) else Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) Color(0xFF1E293B) else Color(0xFFE2E8F0)),
+                        modifier = Modifier.height(26.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
                             Icon(
                                 if (folder == "المفضلة") Icons.Default.Star else Icons.Default.Folder,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp)
+                                tint = if (isSelected) Color(0xFFFBBF24) else Color.Gray,
+                                modifier = Modifier.size(11.dp)
                             )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF1E293B),
-                            selectedLabelColor = Color.White,
-                            selectedLeadingIconColor = Color(0xFFFBBF24),
-                            containerColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.heightIn(min = 36.dp)
-                    )
-                }
-
-                item {
-                    // New Folder Button directly in the flow
-                    Surface(
-                        onClick = { showNewFolderDialog = true },
-                        shape = RoundedCornerShape(10.dp),
-                        color = theme.primaryColor.copy(alpha = 0.08f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.3f)),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 10.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(14.dp))
-                            Text("مجلد جديد", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                            Text(
+                                text = "$folder ($count)",
+                                fontSize = 10.sp,
+                                color = if (isSelected) Color.White else theme.textColor,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
                         }
                     }
                 }
             }
 
-            // Category Filter Chips with counts
+            // Compact Category Filter Chips
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 items(DocumentCategory.values(), key = { it.name }) { cat ->
                     val isSelected = selectedCategory == cat
                     val count = categoryCounts[cat] ?: 0
-                    FilterChip(
-                        selected = isSelected,
+                    Surface(
                         onClick = { selectedCategory = cat },
-                        label = {
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) theme.primaryColor else Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) theme.primaryColor else Color(0xFFE2E8F0)),
+                        modifier = Modifier.height(26.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
                                 text = "${cat.icon} ${cat.displayName} ($count)",
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
+                                color = if (isSelected) Color.White else theme.textColor,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = theme.primaryColor,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.heightIn(min = 36.dp)
-                    )
+                        }
+                    }
                 }
             }
 

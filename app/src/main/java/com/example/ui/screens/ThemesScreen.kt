@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
@@ -31,7 +32,8 @@ import com.example.ui.MainViewModel
 
 @Composable
 fun ThemesScreen(
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    onBack: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val currentThemeId by viewModel.currentThemeId.collectAsState()
@@ -40,10 +42,10 @@ fun ThemesScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Header
+        // Compact Header with Back Button when opened as a branch inside Settings
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -54,29 +56,45 @@ fun ThemesScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (onBack != null) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(activeTheme.primaryColor.copy(alpha = 0.12f))
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "رجوع للإعدادات",
+                            tint = activeTheme.primaryColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(activeTheme.primaryColor),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Palette, contentDescription = null, tint = Color.White)
+                    Icon(Icons.Default.Palette, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "التخصيص البصري والثيمات ثلاثية الأبعاد (FR-UI-01)",
-                        fontSize = 16.sp,
+                        text = "فرع الثيمات والتخصيص البصري 3D",
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = activeTheme.textColor
                     )
                     Text(
-                        text = "3 ثيمات دافئة مدروسة تقلل إجهاد العين مع تأثيرات العمق 3D",
-                        fontSize = 11.sp,
+                        text = "ثيمات دافئة مدروسة تقلل إجهاد العين مع تأثيرات العمق 3D",
+                        fontSize = 10.sp,
                         color = activeTheme.textColor.copy(alpha = 0.75f)
                     )
                 }

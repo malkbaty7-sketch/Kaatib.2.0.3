@@ -245,63 +245,99 @@ fun EditorScreen(
         modifier = Modifier.fillMaxSize().imePadding(),
         topBar = {
             if (!isFocusMode) {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(
-                                text = project?.projectName ?: "محرر خطة",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            Text(
-                                text = "${chapters.size} صفحات • $paperSize • نمط العرض: ${if (pageViewMode == "SINGLE_PAGE") "صفحة مفردة" else "صفحتين"}",
-                                fontSize = 10.sp,
-                                color = Color.Gray
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.Close, contentDescription = "خروج")
-                        }
-                    },
-                    actions = {
-                        // 1. Completed E-Book Preview Button (زر عرض شكل الكتاب المكتمل)
-                        Button(
-                            onClick = { showEBookPreview = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                Surface(
+                    color = theme.surfaceColor,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("معاينة الكتاب", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        // 2. AI Writing Assistant (المساعد الذكي)
-                        IconButton(onClick = { showAiAssistantDialog = true }) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = "المساعد الذكي", tint = theme.primaryColor)
-                        }
-
-                        // 3. Export (تصدير)
-                        IconButton(onClick = { showExportDialog = true }) {
-                            Icon(Icons.Default.FileDownload, contentDescription = "تصدير", tint = theme.primaryColor)
-                        }
-
-                        // 4. Save (حفظ)
-                        IconButton(onClick = {
-                            viewModel.saveCurrentProject()
-                            Toast.makeText(context, "تم حفظ العمل بنجاح!", Toast.LENGTH_SHORT).show()
-                        }) {
-                            Icon(Icons.Default.Save, contentDescription = "حفظ", tint = theme.primaryColor)
-                        }
-
-                        // 5. Overflow Dropdown Menu with all Tools and Services
-                        Box {
-                            IconButton(onClick = { showServicesMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "المزيد من الخدمات والأدوات")
+                            IconButton(
+                                onClick = onBack,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "خروج", modifier = Modifier.size(16.dp))
                             }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = project?.projectName ?: "محرر خطة",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = "${chapters.size} ص • $paperSize • ${if (pageViewMode == "SINGLE_PAGE") "مفردة" else "صفحتين"}",
+                                    fontSize = 9.sp,
+                                    color = Color.Gray,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            // 1. Completed E-Book Preview Button (Compact)
+                            Button(
+                                onClick = { showEBookPreview = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(26.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("معاينة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // 2. AI Writing Assistant
+                            IconButton(
+                                onClick = { showAiAssistantDialog = true },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = "المساعد الذكي", tint = theme.primaryColor, modifier = Modifier.size(16.dp))
+                            }
+
+                            // 3. Export
+                            IconButton(
+                                onClick = { showExportDialog = true },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.FileDownload, contentDescription = "تصدير", tint = theme.primaryColor, modifier = Modifier.size(16.dp))
+                            }
+
+                            // 4. Save
+                            IconButton(
+                                onClick = {
+                                    viewModel.saveCurrentProject()
+                                    Toast.makeText(context, "تم حفظ العمل بنجاح!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Save, contentDescription = "حفظ", tint = theme.primaryColor, modifier = Modifier.size(16.dp))
+                            }
+
+                            // 5. Overflow Dropdown Menu with all Tools and Services
+                            Box {
+                                IconButton(
+                                    onClick = { showServicesMenu = true },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "المزيد من الخدمات والأدوات", modifier = Modifier.size(16.dp))
+                                }
                             DropdownMenu(
                                 expanded = showServicesMenu,
                                 onDismissRequest = { showServicesMenu = false }
@@ -504,11 +540,11 @@ fun EditorScreen(
                                         isFocusMode = true
                                     }
                                 )
+                                }
                             }
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = theme.surfaceColor)
-                )
+                    }
+                }
             }
         },
         floatingActionButton = {
@@ -539,178 +575,214 @@ fun EditorScreen(
                         .fillMaxHeight()
                 ) {
                     // Reorderable Chapters & Tabs Bar (FR-SE-04, FR-SE-05)
+            // Compact Reorderable Chapters & Tabs Bar + View Mode Selector
             if (!isFocusMode) {
-                Card(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .shadow(2.dp, RoundedCornerShape(12.dp)),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.White,
+                    shadowElevation = 1.dp
                 ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Scrollable Tab List
                     Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val hasFrontCover = chapters.any { it.sectionType == "FRONT_COVER" }
-                        val hasBackCover = chapters.any { it.sectionType == "BACK_COVER" }
+                        // Scrollable Tab List
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val hasFrontCover = chapters.any { it.sectionType == "FRONT_COVER" }
+                            val hasBackCover = chapters.any { it.sectionType == "BACK_COVER" }
 
-                        // Quick Add Front Cover if not added yet
-                        if (!hasFrontCover) {
-                            AssistChip(
-                                onClick = {
-                                    val defaultTemplate = com.example.data.model.BookCoverTemplate(
-                                        title = "الغلاف الأمامي",
-                                        bookTitle = project?.projectName ?: "عنوان الكتاب",
-                                        subtitle = "كتاب إلكتروني متكامل",
-                                        authorName = "اسم المؤلف",
-                                        publisherName = "دار النشر",
-                                        category = "عام"
-                                    )
-                                    viewModel.setProjectFrontCover(defaultTemplate)
-                                    viewModel.activeChapterIndex.value = 0
-                                },
-                                label = { Text("+ غلاف البداية 📖", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                colors = AssistChipDefaults.assistChipColors(labelColor = theme.primaryColor),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.5f))
-                            )
-                        }
-
-                        chapters.forEachIndexed { index, chapter ->
-                            val isSelected = index == activeIdx
-                            val isCover = chapter.sectionType == "FRONT_COVER" || chapter.sectionType == "BACK_COVER"
-                            Card(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { viewModel.activeChapterIndex.value = index }
-                                    .border(
-                                        width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) theme.primaryColor else if (isCover) Color(0xFFD97706).copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.08f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isSelected) theme.primaryColor.copy(alpha = 0.12f) else if (isCover) Color(0xFFFEF3C7).copy(alpha = 0.5f) else Color(0xFFFAFAFA)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            if (!hasFrontCover) {
+                                Surface(
+                                    onClick = {
+                                        val defaultTemplate = com.example.data.model.BookCoverTemplate(
+                                            title = "الغلاف الأمامي",
+                                            bookTitle = project?.projectName ?: "عنوان الكتاب",
+                                            subtitle = "كتاب إلكتروني متكامل",
+                                            authorName = "اسم المؤلف",
+                                            publisherName = "دار النشر",
+                                            category = "عام"
+                                        )
+                                        viewModel.setProjectFrontCover(defaultTemplate)
+                                        viewModel.activeChapterIndex.value = 0
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = theme.primaryColor.copy(alpha = 0.08f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.4f))
                                 ) {
                                     Text(
-                                        text = chapter.tabName,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) theme.primaryColor else if (isCover) Color(0xFF92400E) else Color.DarkGray
+                                        text = "+ غلاف 📖",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = theme.primaryColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                     )
-                                    if (isSelected && chapters.size > 1) {
-                                        IconButton(
-                                            onClick = { viewModel.deleteChapter(index) },
-                                            modifier = Modifier.size(18.dp)
-                                        ) {
-                                            Icon(Icons.Default.Close, contentDescription = "حذف", modifier = Modifier.size(12.dp), tint = Color.Gray)
+                                }
+                            }
+
+                            chapters.forEachIndexed { index, chapter ->
+                                val isSelected = index == activeIdx
+                                val isCover = chapter.sectionType == "FRONT_COVER" || chapter.sectionType == "BACK_COVER"
+                                Surface(
+                                    onClick = { viewModel.activeChapterIndex.value = index },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (isSelected) theme.primaryColor.copy(alpha = 0.14f) else if (isCover) Color(0xFFFEF3C7).copy(alpha = 0.6f) else Color(0xFFF8FAFC),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) theme.primaryColor else if (isCover) Color(0xFFD97706).copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.08f)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Text(
+                                            text = chapter.tabName,
+                                            fontSize = 10.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) theme.primaryColor else if (isCover) Color(0xFF92400E) else Color.DarkGray
+                                        )
+                                        if (isSelected && chapters.size > 1) {
+                                            IconButton(
+                                                onClick = { viewModel.deleteChapter(index) },
+                                                modifier = Modifier.size(14.dp)
+                                            ) {
+                                                Icon(Icons.Default.Close, contentDescription = "حذف", modifier = Modifier.size(10.dp), tint = Color.Gray)
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        // Add Tab Button (+)
-                        IconButton(
-                            onClick = { viewModel.addNewChapter("فصل جديد") },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(Icons.Default.AddCircle, contentDescription = "إضافة تبويب", tint = theme.primaryColor)
-                        }
+                            IconButton(
+                                onClick = { viewModel.addNewChapter("فصل جديد") },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.AddCircle, contentDescription = "إضافة تبويب", tint = theme.primaryColor, modifier = Modifier.size(16.dp))
+                            }
 
-                        // Quick Add Back Cover if not added yet
-                        if (!hasBackCover) {
-                            AssistChip(
-                                onClick = {
-                                    val defaultTemplate = com.example.data.model.BookCoverTemplate(
-                                        title = "الغلاف الخلفي",
-                                        bookTitle = project?.projectName ?: "عنوان الكتاب",
-                                        subtitle = "",
-                                        authorName = "اسم المؤلف",
-                                        backSynopsis = "نبذة موجزة عن الكتاب ومحتواه...",
-                                        backAuthorBio = "عن المؤلف...",
-                                        category = "عام"
+                            if (!hasBackCover) {
+                                Surface(
+                                    onClick = {
+                                        val defaultTemplate = com.example.data.model.BookCoverTemplate(
+                                            title = "الغلاف الخلفي",
+                                            bookTitle = project?.projectName ?: "عنوان الكتاب",
+                                            subtitle = "",
+                                            authorName = "اسم المؤلف",
+                                            backSynopsis = "نبذة موجزة عن الكتاب ومحتواه...",
+                                            backAuthorBio = "عن المؤلف...",
+                                            category = "عام"
+                                        )
+                                        viewModel.setProjectBackCover(defaultTemplate)
+                                        viewModel.activeChapterIndex.value = viewModel.activeChapters.value.lastIndex
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFFF1F5F9),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.4f))
+                                ) {
+                                    Text(
+                                        text = "+ خاتمة 🔖",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF334155),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                     )
-                                    viewModel.setProjectBackCover(defaultTemplate)
-                                    viewModel.activeChapterIndex.value = viewModel.activeChapters.value.lastIndex
+                                }
+                            }
+                        }
+
+                        // Compact Tab Order & Rename Controls
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    viewModel.moveChapter(activeIdx, -1)
                                 },
-                                label = { Text("+ غلاف النهاية 🔖", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                colors = AssistChipDefaults.assistChipColors(labelColor = Color(0xFF334155)),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155).copy(alpha = 0.5f))
-                            )
-                        }
-                    }
+                                enabled = activeIdx > 0,
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "تقديم التبويب", modifier = Modifier.size(13.dp))
+                            }
 
-                    // Tab Order Controls (Left / Right) (FR-SE-05)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        IconButton(
-                            onClick = {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                viewModel.moveChapter(activeIdx, -1)
-                            },
-                            enabled = activeIdx > 0,
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "تقديم التبويب", modifier = Modifier.size(16.dp))
-                        }
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    viewModel.moveChapter(activeIdx, 1)
+                                },
+                                enabled = activeIdx < chapters.lastIndex,
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "تأخير التبويب", modifier = Modifier.size(13.dp))
+                            }
 
-                        IconButton(
-                            onClick = {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                viewModel.moveChapter(activeIdx, 1)
-                            },
-                            enabled = activeIdx < chapters.lastIndex,
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "تأخير التبويب", modifier = Modifier.size(16.dp))
-                        }
-
-                        IconButton(
-                            onClick = { showRenameTabDialog = true },
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Icon(Icons.Default.EditNote, contentDescription = "تسمية التبويب", modifier = Modifier.size(18.dp), tint = theme.primaryColor)
+                            IconButton(
+                                onClick = { showRenameTabDialog = true },
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(Icons.Default.EditNote, contentDescription = "تسمية التبويب", modifier = Modifier.size(14.dp), tint = theme.primaryColor)
+                            }
                         }
                     }
                 }
             }
-            }
 
-            // Quick Services Action Bar (شريط أدوات الكتابة والخدمات السريعة)
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 2.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f))
-            ) {
-                Row(
+            // Ultra-Compact Quick Services & View Mode Bar (شريط الخدمات السريعة وأنماط العرض المدمج)
+            if (!isFocusMode) {
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.White.copy(alpha = 0.92f)
                 ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Inline View Mode Selector Chips (افتراضي، Word، Text، كتاب)
+                        listOf(
+                            "defaultView" to "افتراضي",
+                            "word" to "Word",
+                            "text" to "Text",
+                            "eBook" to "كتاب"
+                        ).forEach { (modeKey, modeTitle) ->
+                            val isSelected = katibViewMode == modeKey
+                            Surface(
+                                onClick = { katibViewMode = modeKey },
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelected) Color(0xFFD0631B) else Color(0xFFE2DDD3),
+                                modifier = Modifier.height(24.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 7.dp)) {
+                                    Text(
+                                        text = modeTitle,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) Color.White else Color.Black
+                                    )
+                                }
+                            }
+                        }
+
+                        Box(modifier = Modifier.width(1.dp).height(16.dp).background(Color.LightGray))
                     AssistChip(
                         onClick = { showAnalyticsDialog = true },
                         leadingIcon = { Icon(Icons.Default.Insights, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0D9488)) },
@@ -868,6 +940,7 @@ fun EditorScreen(
                         label = { Text("تركيز", fontSize = 11.sp) }
                     )
                 }
+                }
             }
 
             // Word Count Goal Progress Bar
@@ -981,55 +1054,12 @@ fun EditorScreen(
                 }
             }
 
-            // Katib View Mode Selector (شريط اختيار نمط العرض: افتراضي، صفحة Word، نص Text، كتاب إلكتروني)
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 2.dp),
-                color = Color(0xFFE2DDD3),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    listOf(
-                        "defaultView" to "افتراضي",
-                        "word" to "صفحة Word",
-                        "text" to "نص Text",
-                        "eBook" to "كتاب إلكتروني"
-                    ).forEach { (modeKey, modeTitle) ->
-                        val isSelected = katibViewMode == modeKey
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { katibViewMode = modeKey },
-                            label = {
-                                Text(
-                                    text = modeTitle,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) Color.White else Color.Black
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFFD0631B),
-                                containerColor = Color.White.copy(alpha = 0.8f)
-                            ),
-                            border = null
-                        )
-                    }
-                }
-            }
-
-            // Paper Canvas Area
+            // Expanded Paper Canvas Area (تمت إزالة شريط اختيار نمط العرض المنفصل ودمجه في الشريط العلوي لتوسيع مساحة الكتابة)
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 val currentChapterImages = remember(currentChapter?.imagesJson) {
@@ -1154,161 +1184,119 @@ fun EditorScreen(
                 }
             }
 
-            // Katib Bottom Navigation Bar with Insets / SafeArea protection (الشريط السفلي المتكامل للتنقل بين الصفحات والأغلفة)
+            // Ultra-Compact Single-Row Bottom Navigation Bar
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding(),
                 color = Color(0xFFEFEBE4),
-                shadowElevation = 8.dp
+                shadowElevation = 4.dp
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Vertical Navigation Bar (إلغاء المؤشر الأفقي والاعتماد على السكرول الرأسي من أسفل لأعلى والعكس)
-                    if (chapters.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFD0631B).copy(alpha = 0.12f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.SwapVert,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD0631B),
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = "سكرول رأسي (اسحب لأعلى ⬆ ولأسفل ⬇)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFD0631B)
-                                    )
-                                }
+                    Button(
+                        onClick = {
+                            if (activeIdx > 0) {
+                                viewModel.activeChapterIndex.value = activeIdx - 1
                             }
+                        },
+                        enabled = activeIdx > 0,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0631B)),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(28.dp).weight(0.95f)
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "الصفحة السابقة", modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text("السابقة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
 
+                    OutlinedButton(
+                        onClick = {
+                            val frontCoverIdx = chapters.indexOfFirst { it.sectionType == "FRONT_COVER" }
+                            if (frontCoverIdx >= 0) {
+                                viewModel.activeChapterIndex.value = frontCoverIdx
+                            } else {
+                                val defaultTemplate = com.example.data.model.BookCoverTemplate(
+                                    title = "الغلاف الأمامي",
+                                    bookTitle = project?.projectName ?: "عنوان الكتاب",
+                                    subtitle = "كتاب إلكتروني متكامل",
+                                    authorName = "اسم المؤلف",
+                                    publisherName = "دار النشر",
+                                    category = "عام"
+                                )
+                                viewModel.setProjectFrontCover(defaultTemplate)
+                                viewModel.activeChapterIndex.value = 0
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(28.dp).weight(0.75f)
+                    ) {
+                        Text("الغلاف", fontSize = 9.sp)
+                    }
+
+                    Surface(
+                        onClick = { showCorkboardScreen = true },
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFFD0631B).copy(alpha = 0.12f),
+                        modifier = Modifier.height(28.dp).weight(1.1f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 4.dp)) {
                             Text(
-                                text = "صفحة ${activeIdx + 1} من ${chapters.size}",
-                                fontSize = 11.sp,
+                                text = "الفهرس (${activeIdx + 1}/${chapters.size})",
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF4A3E3D)
+                                color = Color(0xFFD0631B)
                             )
                         }
                     }
 
-                    // Navigation Buttons with Vertical arrows and direct actions
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    OutlinedButton(
+                        onClick = {
+                            val backCoverIdx = chapters.indexOfFirst { it.sectionType == "BACK_COVER" }
+                            if (backCoverIdx >= 0) {
+                                viewModel.activeChapterIndex.value = backCoverIdx
+                            } else {
+                                val defaultTemplate = com.example.data.model.BookCoverTemplate(
+                                    title = "الغلاف الخلفي",
+                                    bookTitle = project?.projectName ?: "عنوان الكتاب",
+                                    subtitle = "الخاتمة والنبذة",
+                                    authorName = "اسم المؤلف",
+                                    publisherName = "دار النشر",
+                                    category = "عام"
+                                )
+                                viewModel.setProjectBackCover(defaultTemplate)
+                                viewModel.activeChapterIndex.value = chapters.size - 1
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(28.dp).weight(0.75f)
                     ) {
-                        Button(
-                            onClick = {
-                                if (activeIdx > 0) {
-                                    viewModel.activeChapterIndex.value = activeIdx - 1
-                                }
-                            },
-                            enabled = activeIdx > 0,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0631B)),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1.1f)
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "الصفحة السابقة", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text("السابقة ⬆", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
+                        Text("الخاتمة", fontSize = 9.sp)
+                    }
 
-                        OutlinedButton(
-                            onClick = {
-                                val frontCoverIdx = chapters.indexOfFirst { it.sectionType == "FRONT_COVER" }
-                                if (frontCoverIdx >= 0) {
-                                    viewModel.activeChapterIndex.value = frontCoverIdx
-                                } else {
-                                    val defaultTemplate = com.example.data.model.BookCoverTemplate(
-                                        title = "الغلاف الأمامي",
-                                        bookTitle = project?.projectName ?: "عنوان الكتاب",
-                                        subtitle = "كتاب إلكتروني متكامل",
-                                        authorName = "اسم المؤلف",
-                                        publisherName = "دار النشر",
-                                        category = "عام"
-                                    )
-                                    viewModel.setProjectFrontCover(defaultTemplate)
-                                    viewModel.activeChapterIndex.value = 0
-                                }
-                            },
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(0.9f)
-                        ) {
-                            Text("الغلاف", fontSize = 10.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                showCorkboardScreen = true
-                            },
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(0.9f)
-                        ) {
-                            Text("الفهرس", fontSize = 10.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                val backCoverIdx = chapters.indexOfFirst { it.sectionType == "BACK_COVER" }
-                                if (backCoverIdx >= 0) {
-                                    viewModel.activeChapterIndex.value = backCoverIdx
-                                } else {
-                                    val defaultTemplate = com.example.data.model.BookCoverTemplate(
-                                        title = "الغلاف الخلفي",
-                                        bookTitle = project?.projectName ?: "عنوان الكتاب",
-                                        subtitle = "الخاتمة والنبذة",
-                                        authorName = "اسم المؤلف",
-                                        publisherName = "دار النشر",
-                                        category = "عام"
-                                    )
-                                    viewModel.setProjectBackCover(defaultTemplate)
-                                    viewModel.activeChapterIndex.value = chapters.size - 1
-                                }
-                            },
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(0.9f)
-                        ) {
-                            Text("الخاتمة", fontSize = 10.sp)
-                        }
-
-                        Button(
-                            onClick = {
-                                if (activeIdx < chapters.size - 1) {
-                                    viewModel.activeChapterIndex.value = activeIdx + 1
-                                }
-                            },
-                            enabled = activeIdx < chapters.size - 1,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0631B)),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1.1f)
-                        ) {
-                            Text("التالية ⬇", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "الصفحة التالية", modifier = Modifier.size(16.dp))
-                        }
+                    Button(
+                        onClick = {
+                            if (activeIdx < chapters.size - 1) {
+                                viewModel.activeChapterIndex.value = activeIdx + 1
+                            }
+                        },
+                        enabled = activeIdx < chapters.size - 1,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0631B)),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(28.dp).weight(0.95f)
+                    ) {
+                        Text("التالية", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "الصفحة التالية", modifier = Modifier.size(13.dp))
                     }
                 }
             }
@@ -1851,16 +1839,16 @@ fun SinglePaperSheet(
     var selectedImageId by remember { mutableStateOf<String?>(null) }
     var showSearchReplaceDialog by remember { mutableStateOf(false) }
 
-    // View mode styling: Word (32dp margin, sharp A4), Text (12dp compact), eBook (24dp cream)
+    // View mode styling with expanded writing area
     val pageMargins = when (katibViewMode) {
-        "word" -> 32.dp
-        "text" -> 12.dp
-        else -> 24.dp
+        "word" -> 16.dp
+        "text" -> 8.dp
+        else -> 12.dp
     }
     val cardCornerRadius = when (katibViewMode) {
         "word" -> 0.dp
         "text" -> 8.dp
-        else -> 12.dp
+        else -> 10.dp
     }
     val effectivePaperColor = when (katibViewMode) {
         "word" -> Color(0xFFFFFDF9)
@@ -1912,7 +1900,6 @@ fun SinglePaperSheet(
                 onContentChange(previous)
                 steps++
 
-                // التوقف عند الوصول إلى آخر موضع قام فيه المستخدم بالحفظ أو عند نهاية المكدس
                 if (previous == lastSavedCheckpoint || undoStack.isEmpty()) {
                     break
                 }
@@ -1931,7 +1918,7 @@ fun SinglePaperSheet(
     Card(
         modifier = Modifier
             .fillMaxSize()
-            .shadow(if (katibViewMode == "text") 2.dp else 10.dp, RoundedCornerShape(cardCornerRadius), spotColor = Color(0x44000000))
+            .shadow(if (katibViewMode == "text") 2.dp else 8.dp, RoundedCornerShape(cardCornerRadius), spotColor = Color(0x44000000))
             .border(1.dp, Color.Black.copy(alpha = 0.08f), RoundedCornerShape(cardCornerRadius)),
         shape = RoundedCornerShape(cardCornerRadius),
         colors = CardDefaults.cardColors(containerColor = effectivePaperColor)
@@ -1939,36 +1926,41 @@ fun SinglePaperSheet(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(pageMargins),
+                .padding(horizontal = pageMargins, vertical = 6.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Katib Chapter Header Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = when (katibViewMode) {
-                        "word" -> "مستند Word A4"
-                        "text" -> "نص حر"
-                        "eBook" -> "كتاب إلكتروني"
-                        else -> "مشروع"
-                    },
-                    style = androidx.compose.ui.text.TextStyle(color = Color.Gray, fontSize = 11.sp)
-                )
-                Text(
-                    text = "الفصل ${pageIndex + 1}: ${chapter?.title?.ifBlank { "الحدث المحفز" } ?: "الفصل 1"}",
-                    style = androidx.compose.ui.text.TextStyle(
-                        color = Color(0xFFD0631B),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+            // Pinned Top Section: RichWritingToolbar fixed at the top right below the compact taskbars (Requirement #6)
+            if (chapter != null && !isReadOnly) {
+                Box(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                    RichWritingToolbar(
+                        theme = theme,
+                        fontSizeSp = fontSizeSp,
+                        onFontSizeChange = { fontSizeSp = it },
+                        textAlign = textAlign,
+                        onTextAlignChange = { textAlign = it },
+                        lineSpacingFactor = lineSpacingFactor,
+                        onLineSpacingChange = { lineSpacingFactor = it },
+                        textColor = textColor,
+                        onTextColorChange = { textColor = it },
+                        highlightColor = highlightColor,
+                        onHighlightColorChange = { highlightColor = it },
+                        canUndo = undoStack.isNotEmpty(),
+                        canRedo = redoStack.isNotEmpty(),
+                        onUndo = { handleUndo() },
+                        onRedo = { handleRedo() },
+                        onUndoToSaveCheckpoint = { handleUndoToSaveCheckpoint() },
+                        undoCount = undoStack.size,
+                        redoCount = redoStack.size,
+                        onInsertText = { p, s, h -> insertFormatting(p, s, h) },
+                        onAddImageClick = { showImagePickerDialog = true },
+                        onSearchReplaceClick = { showSearchReplaceDialog = true },
+                        onVoiceTypingClick = { onVoiceTypingClick() },
+                        content = currentContent,
+                        imagesCount = images.size
                     )
-                )
+                }
             }
-            HorizontalDivider(color = Color.Black.copy(alpha = 0.08f), thickness = 1.dp)
+
             // Top Page Number (if position is TOP_*)
             if (pageNumberPosition.startsWith("TOP")) {
                 PageNumberView(
@@ -1978,72 +1970,58 @@ fun SinglePaperSheet(
                 )
             }
 
-            // Editable Chapter Content
+            // Scrollable Editable Chapter Content Underneath the Pinned Toolbar
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (chapter != null) {
+                    // Compact inline chapter title + mode indicator
                     if (!isReadOnly) {
-                        OutlinedTextField(
-                            value = chapter.title,
-                            onValueChange = onTitleChange,
-                            placeholder = { Text("عنوان الفصل أو القسم") },
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                fontFamily = fontFamily,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2C2C2C)
-                            ),
-                            singleLine = true,
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = theme.primaryColor,
-                                unfocusedBorderColor = Color.Transparent
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = chapter.title,
+                                onValueChange = onTitleChange,
+                                singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    fontFamily = fontFamily,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2C2C2C)
+                                ),
+                                modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                                decorationBox = { innerTextField ->
+                                    if (chapter.title.isEmpty()) {
+                                        Text("عنوان الفصل أو القسم...", fontSize = 15.sp, color = Color.Gray)
+                                    }
+                                    innerTextField()
+                                }
                             )
-                        )
-
-                        // Rich Writing & Text Editing Toolbar
-                        RichWritingToolbar(
-                            theme = theme,
-                            fontSizeSp = fontSizeSp,
-                            onFontSizeChange = { fontSizeSp = it },
-                            textAlign = textAlign,
-                            onTextAlignChange = { textAlign = it },
-                            lineSpacingFactor = lineSpacingFactor,
-                            onLineSpacingChange = { lineSpacingFactor = it },
-                            textColor = textColor,
-                            onTextColorChange = { textColor = it },
-                            highlightColor = highlightColor,
-                            onHighlightColorChange = { highlightColor = it },
-                            canUndo = undoStack.isNotEmpty(),
-                            canRedo = redoStack.isNotEmpty(),
-                            onUndo = { handleUndo() },
-                            onRedo = { handleRedo() },
-                            onUndoToSaveCheckpoint = { handleUndoToSaveCheckpoint() },
-                            undoCount = undoStack.size,
-                            redoCount = redoStack.size,
-                            onInsertText = { p, s, h -> insertFormatting(p, s, h) },
-                            onAddImageClick = { showImagePickerDialog = true },
-                            onSearchReplaceClick = { showSearchReplaceDialog = true },
-                            onVoiceTypingClick = { onVoiceTypingClick() },
-                            content = currentContent,
-                            imagesCount = images.size
-                        )
+                            Text(
+                                text = "فصل ${pageIndex + 1}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD0631B)
+                            )
+                        }
                     } else {
                         Text(
                             text = chapter.title,
                             fontFamily = fontFamily,
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2C2C2C)
                         )
                     }
 
-                    Divider(color = Color.Black.copy(alpha = 0.08f), thickness = 1.dp)
+                    HorizontalDivider(color = Color.Black.copy(alpha = 0.08f), thickness = 1.dp)
 
                     // Images Container (Multiple draggable & customizable images on page)
                     if (images.isNotEmpty()) {

@@ -45,53 +45,53 @@ fun ReaderSettingsBar(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .shadow(10.dp, RoundedCornerShape(24.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .shadow(6.dp, RoundedCornerShape(16.dp))
             .testTag("reader_quick_settings_bar"),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(16.dp),
         color = settingsState.theme.surfaceColor,
-        tonalElevation = 6.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, settingsState.theme.borderColor.copy(alpha = 0.6f))
+        tonalElevation = 4.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, settingsState.theme.borderColor.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // أزرار التحكم السريع في حجم الخط (A- و A+)
+            // أزرار التحكم السريع في حجم الخط (A- و A+) بأحجام مدمجة
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 IconButton(
                     onClick = {
                         val newSize = (settingsState.fontSizeSp - 1.5f).coerceAtLeast(ReaderSettingsState.MIN_FONT_SIZE)
                         onSettingsChanged(settingsState.copy(fontSizeSp = newSize))
                     },
-                    modifier = Modifier.size(36.dp).testTag("quick_decrease_font_button"),
+                    modifier = Modifier.size(28.dp).testTag("quick_decrease_font_button"),
                     enabled = settingsState.fontSizeSp > ReaderSettingsState.MIN_FONT_SIZE
                 ) {
                     Icon(
                         imageVector = Icons.Default.TextDecrease,
                         contentDescription = "تصغير الخط",
                         tint = settingsState.theme.textColor,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(6.dp),
                     color = settingsState.theme.textColor.copy(alpha = 0.08f),
                     modifier = Modifier.padding(horizontal = 2.dp)
                 ) {
                     Text(
                         text = "${settingsState.fontSizeSp.toInt()} sp",
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = settingsState.theme.textColor,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                     )
                 }
 
@@ -100,22 +100,22 @@ fun ReaderSettingsBar(
                         val newSize = (settingsState.fontSizeSp + 1.5f).coerceAtMost(ReaderSettingsState.MAX_FONT_SIZE)
                         onSettingsChanged(settingsState.copy(fontSizeSp = newSize))
                     },
-                    modifier = Modifier.size(36.dp).testTag("quick_increase_font_button"),
+                    modifier = Modifier.size(28.dp).testTag("quick_increase_font_button"),
                     enabled = settingsState.fontSizeSp < ReaderSettingsState.MAX_FONT_SIZE
                 ) {
                     Icon(
                         imageVector = Icons.Default.TextIncrease,
                         contentDescription = "تكبير الخط",
                         tint = settingsState.theme.textColor,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
 
-            // دوائر سريعة لاختيار الثيم اللوني
+            // دوائر سريعة لاختيار الثيم اللوني بأحجام مدمجة
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 ReaderTheme.values().forEach { themeOption ->
                     val isSelected = settingsState.theme == themeOption
@@ -127,11 +127,11 @@ fun ReaderSettingsBar(
 
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(20.dp)
                             .clip(CircleShape)
                             .background(themeOption.backgroundColor)
                             .border(
-                                width = if (isSelected) 2.5.dp else 1.dp,
+                                width = if (isSelected) 2.dp else 1.dp,
                                 color = animatedBorderColor,
                                 shape = CircleShape
                             )
@@ -144,7 +144,7 @@ fun ReaderSettingsBar(
                         if (isSelected) {
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
+                                    .size(6.dp)
                                     .clip(CircleShape)
                                     .background(themeOption.textColor)
                             )
@@ -153,11 +153,11 @@ fun ReaderSettingsBar(
                 }
             }
 
-            // زر فتح الإعدادات الشاملة (Bottom Sheet)
+            // زر فتح الإعدادات الشاملة (Bottom Sheet) بحجم مدمج
             IconButton(
                 onClick = onOpenFullSettings,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(28.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                     .testTag("open_full_reader_settings_button")
@@ -166,7 +166,7 @@ fun ReaderSettingsBar(
                     imageVector = Icons.Default.Tune,
                     contentDescription = "فتح كافة إعدادات القراءة",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }

@@ -121,74 +121,103 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .background(theme.backgroundBrush),
                             topBar = {
-                                TopAppBar(
-                                    title = {
+                                Surface(
+                                    color = Color.Transparent,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .statusBarsPadding()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
                                                 text = AppLocalization.string(currentLang, "app_name"),
                                                 fontWeight = FontWeight.Black,
-                                                fontSize = 18.sp,
+                                                fontSize = 16.sp,
                                                 color = theme.textColor
                                             )
                                             if (isVip) {
                                                 Surface(
                                                     color = Color(0xFFD97706),
-                                                    shape = RoundedCornerShape(6.dp)
+                                                    shape = RoundedCornerShape(4.dp)
                                                 ) {
                                                     Text(
                                                         text = "VIP",
-                                                        fontSize = 10.sp,
+                                                        fontSize = 9.sp,
                                                         color = Color.White,
                                                         fontWeight = FontWeight.Bold,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                                                     )
                                                 }
                                             }
                                         }
-                                    },
-                                    actions = {
-                                        // Device Documents & External Library (Task 1)
-                                        IconButton(onClick = { showDeviceDocsScreen = true }) {
-                                            Icon(Icons.Default.FolderSpecial, contentDescription = "مستندات الجهاز والمكتبة الخارجية", tint = theme.primaryColor)
-                                        }
 
-                                        // Writing & Productivity Analytics Quick Access (Task 4.3)
-                                        IconButton(onClick = { showAnalyticsDialog = true }) {
-                                            Icon(Icons.Default.Insights, contentDescription = "إحصائيات وتحليلات الإنتاجية", tint = theme.primaryColor)
-                                        }
-
-                                        // Arabic Document Converter & Tashkeel Studio
-                                        IconButton(onClick = { showArabicConverterStudio = true }) {
-                                            Icon(Icons.Default.AutoFixHigh, contentDescription = "محوّل المستندات والتشكيل العربي", tint = theme.primaryColor)
-                                        }
-
-                                        // Research & PDF Browser Quick Access
-                                        IconButton(onClick = { showBrowserDialog = true }) {
-                                            Icon(Icons.Default.Public, contentDescription = "متصفح البحوث", tint = theme.primaryColor)
-                                        }
-
-                                        // Help & FAQ (?)
-                                        IconButton(onClick = { showHelpDialog = true }) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .background(theme.primaryColor.copy(alpha = 0.15f)),
-                                                contentAlignment = Alignment.Center
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            // Standalone Document Viewer Quick Switch
+                                            IconButton(
+                                                onClick = { currentTab = "DOCUMENTS" },
+                                                modifier = Modifier.size(32.dp)
                                             ) {
-                                                Text("?", fontWeight = FontWeight.Black, fontSize = 16.sp, color = theme.primaryColor)
+                                                Icon(Icons.Default.FolderSpecial, contentDescription = "عارض المستندات", tint = theme.primaryColor, modifier = Modifier.size(17.dp))
+                                            }
+
+                                            // Writing & Productivity Analytics Quick Access
+                                            IconButton(
+                                                onClick = { showAnalyticsDialog = true },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.Insights, contentDescription = "إحصائيات وتحليلات الإنتاجية", tint = theme.primaryColor, modifier = Modifier.size(17.dp))
+                                            }
+
+                                            // Arabic Document Converter & Tashkeel Studio
+                                            IconButton(
+                                                onClick = { showArabicConverterStudio = true },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.AutoFixHigh, contentDescription = "محوّل المستندات والتشكيل العربي", tint = theme.primaryColor, modifier = Modifier.size(17.dp))
+                                            }
+
+                                            // Research & PDF Browser Quick Access
+                                            IconButton(
+                                                onClick = { showBrowserDialog = true },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.Public, contentDescription = "متصفح البحوث", tint = theme.primaryColor, modifier = Modifier.size(17.dp))
+                                            }
+
+                                            // Help & FAQ (?)
+                                            IconButton(
+                                                onClick = { showHelpDialog = true },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(22.dp)
+                                                        .clip(CircleShape)
+                                                        .background(theme.primaryColor.copy(alpha = 0.15f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text("?", fontWeight = FontWeight.Black, fontSize = 13.sp, color = theme.primaryColor)
+                                                }
                                             }
                                         }
-                                    },
-                                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                                )
+                                    }
+                                }
                             },
                             bottomBar = {
                                 Column {
-                                    // Ad Banner (Displayed only when !isVip)
+                                    // Slim Ad Banner (Displayed only when !isVip)
                                     if (!isVip) {
                                         Surface(
                                             modifier = Modifier
@@ -197,33 +226,34 @@ class MainActivity : ComponentActivity() {
                                             color = Color(0xFF1E293B)
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                    Surface(color = Color(0xFFF59E0B), shape = RoundedCornerShape(4.dp)) {
-                                                        Text("إعلان", fontSize = 9.sp, color = Color.Black, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Surface(color = Color(0xFFF59E0B), shape = RoundedCornerShape(3.dp)) {
+                                                        Text("إعلان", fontSize = 8.sp, color = Color.Black, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp))
                                                     }
-                                                    Text("استمتع بتجربة خالية من الإعلانات مع كاتب VIP", fontSize = 11.sp, color = Color.White)
+                                                    Text("تجربة خالية من الإعلانات مع كاتب VIP", fontSize = 10.sp, color = Color.White)
                                                 }
-                                                Text("إزالة الإعلانات", fontSize = 11.sp, color = Color(0xFFFBBF24), fontWeight = FontWeight.Bold)
+                                                Text("إزالة الإعلانات", fontSize = 10.sp, color = Color(0xFFFBBF24), fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }
 
                                     NavigationBar(
                                         modifier = Modifier
-                                            .shadow(8.dp, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                                            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)),
+                                            .height(58.dp)
+                                            .shadow(6.dp, RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp)),
                                         containerColor = Color.White,
-                                        tonalElevation = 8.dp
+                                        tonalElevation = 6.dp
                                     ) {
                                         NavigationBarItem(
                                             selected = currentTab == "FILES",
                                             onClick = { currentTab = "FILES" },
-                                            icon = { Icon(Icons.Default.Folder, contentDescription = "الملفات") },
-                                            label = { Text(AppLocalization.string(currentLang, "tab_files"), fontSize = 11.sp) },
+                                            icon = { Icon(Icons.Default.Folder, contentDescription = "المصادر", modifier = Modifier.size(18.dp)) },
+                                            label = { Text(AppLocalization.string(currentLang, "tab_files"), fontSize = 10.sp) },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = theme.primaryColor,
                                                 indicatorColor = theme.primaryColor.copy(alpha = 0.15f)
@@ -233,8 +263,8 @@ class MainActivity : ComponentActivity() {
                                         NavigationBarItem(
                                             selected = currentTab == "EXTRACTION",
                                             onClick = { currentTab = "EXTRACTION" },
-                                            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "الاستخلاص") },
-                                            label = { Text(AppLocalization.string(currentLang, "tab_extraction"), fontSize = 11.sp) },
+                                            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "الاستخلاص", modifier = Modifier.size(18.dp)) },
+                                            label = { Text(AppLocalization.string(currentLang, "tab_extraction"), fontSize = 10.sp) },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = theme.primaryColor,
                                                 indicatorColor = theme.primaryColor.copy(alpha = 0.15f)
@@ -244,8 +274,8 @@ class MainActivity : ComponentActivity() {
                                         NavigationBarItem(
                                             selected = currentTab == "PROJECTS",
                                             onClick = { currentTab = "PROJECTS" },
-                                            icon = { Icon(Icons.Default.LibraryBooks, contentDescription = "المشاريع") },
-                                            label = { Text(AppLocalization.string(currentLang, "tab_projects"), fontSize = 11.sp) },
+                                            icon = { Icon(Icons.Default.LibraryBooks, contentDescription = "المشاريع", modifier = Modifier.size(18.dp)) },
+                                            label = { Text(AppLocalization.string(currentLang, "tab_projects"), fontSize = 10.sp) },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = theme.primaryColor,
                                                 indicatorColor = theme.primaryColor.copy(alpha = 0.15f)
@@ -253,10 +283,10 @@ class MainActivity : ComponentActivity() {
                                         )
 
                                         NavigationBarItem(
-                                            selected = currentTab == "THEMES",
-                                            onClick = { currentTab = "THEMES" },
-                                            icon = { Icon(Icons.Default.Palette, contentDescription = "الثيمات") },
-                                            label = { Text(AppLocalization.string(currentLang, "tab_themes"), fontSize = 11.sp) },
+                                            selected = currentTab == "DOCUMENTS",
+                                            onClick = { currentTab = "DOCUMENTS" },
+                                            icon = { Icon(Icons.Default.FolderSpecial, contentDescription = "عارض المستندات", modifier = Modifier.size(18.dp)) },
+                                            label = { Text(AppLocalization.string(currentLang, "tab_documents"), fontSize = 10.sp) },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = theme.primaryColor,
                                                 indicatorColor = theme.primaryColor.copy(alpha = 0.15f)
@@ -266,8 +296,8 @@ class MainActivity : ComponentActivity() {
                                         NavigationBarItem(
                                             selected = currentTab == "SETTINGS",
                                             onClick = { currentTab = "SETTINGS" },
-                                            icon = { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") },
-                                            label = { Text(AppLocalization.string(currentLang, "tab_settings"), fontSize = 11.sp) },
+                                            icon = { Icon(Icons.Default.Settings, contentDescription = "الإعدادات", modifier = Modifier.size(18.dp)) },
+                                            label = { Text(AppLocalization.string(currentLang, "tab_settings"), fontSize = 10.sp) },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = theme.primaryColor,
                                                 indicatorColor = theme.primaryColor.copy(alpha = 0.15f)
@@ -287,7 +317,7 @@ class MainActivity : ComponentActivity() {
                                     "FILES" -> FilesScreen(
                                         viewModel = viewModel,
                                         onNavigateToExtraction = { currentTab = "EXTRACTION" },
-                                        onOpenDeviceDocuments = { showDeviceDocsScreen = true }
+                                        onOpenDeviceDocuments = { currentTab = "DOCUMENTS" }
                                     )
                                     "EXTRACTION" -> ExtractionScreen(
                                         viewModel = viewModel,
@@ -299,11 +329,18 @@ class MainActivity : ComponentActivity() {
                                             isEditingProject = true
                                         },
                                         onOpenDeviceDocuments = {
-                                            showDeviceDocsScreen = true
+                                            currentTab = "DOCUMENTS"
                                         }
                                     )
-                                    "THEMES" -> ThemesScreen(
-                                        viewModel = viewModel
+                                    "DOCUMENTS" -> DeviceDocumentsScreen(
+                                        theme = theme,
+                                        viewModel = viewModel,
+                                        onBack = { currentTab = "PROJECTS" },
+                                        onOpenDocument = { uriStr, docName ->
+                                            viewingDocUri = uriStr
+                                            viewingDocName = docName
+                                        },
+                                        isMainTab = true
                                     )
                                     else -> SettingsScreen(
                                         viewModel = viewModel,

@@ -319,37 +319,66 @@ fun MultiFormatDocumentViewerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = fileName,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = readerTheme.text
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Surface(
+                color = readerTheme.surface,
+                shadowElevation = 2.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                saveCurrentProgress()
+                                onBack()
+                            },
+                            modifier = Modifier.size(28.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = theme.primaryColor.copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    text = extension.uppercase(),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = theme.primaryColor,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                )
-                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "رجوع",
+                                tint = readerTheme.text,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = theme.primaryColor.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = extension.uppercase(),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = theme.primaryColor,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = fileName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = readerTheme.text
+                            )
                             val progressDisplay = when (extension) {
-                                "pdf" -> if (pdfTotalPages > 0) "صفحة ${pdfCurrentPage + 1} من $pdfTotalPages" else "PDF"
-                                "epub" -> epubBook?.let { "فصل ${epubCurrentChapterIndex + 1} من ${it.chapters.size}" } ?: "EPUB"
-                                "pptx", "ppt" -> pptxPresentation?.let { "شريحة ${pptxCurrentSlideIndex + 1} من ${it.slides.size}" } ?: "PowerPoint"
+                                "pdf" -> if (pdfTotalPages > 0) "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages" else "PDF"
+                                "epub" -> epubBook?.let { "فصل ${epubCurrentChapterIndex + 1} / ${it.chapters.size}" } ?: "EPUB"
+                                "pptx", "ppt" -> pptxPresentation?.let { "شريحة ${pptxCurrentSlideIndex + 1} / ${it.slides.size}" } ?: "PowerPoint"
                                 else -> {
                                     val pct = if (textScrollState.maxValue > 0) {
                                         ((textScrollState.value.toFloat() / textScrollState.maxValue.toFloat()) * 100).toInt()
@@ -357,153 +386,179 @@ fun MultiFormatDocumentViewerScreen(
                                     "تقدم: $pct%"
                                 }
                             }
-                            Text(progressDisplay, fontSize = 10.sp, color = Color.Gray)
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        saveCurrentProgress()
-                        onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع", tint = readerTheme.text)
-                    }
-                },
-                actions = {
-                    // 1. Converter studio launcher button
-                    IconButton(onClick = { showConverterStudioDialog = true }) {
-                        Icon(Icons.Default.Transform, contentDescription = "تحويل وأمان المستند", tint = theme.primaryColor)
-                    }
-
-                    // 2. Bookmark toggle button
-                    IconButton(onClick = {
-                        val currentIdx = currentPositionIndex
-                        val label = when (extension) {
-                            "pdf" -> "صفحة ${pdfCurrentPage + 1}"
-                            "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.title ?: "فصل ${epubCurrentChapterIndex + 1}"
-                            "pptx", "ppt" -> "شريحة ${pptxCurrentSlideIndex + 1}"
-                            else -> "موضع موثق"
-                        }
-
-                        val updated = if (isCurrentPositionBookmarked) {
-                            bookmarks.filter { it.positionIndex != currentIdx }
-                        } else {
-                            bookmarks + DocumentBookmarkItem(
-                                uriString = uriString,
-                                label = label,
-                                positionIndex = currentIdx
-                            )
-                        }
-                        bookmarks = updated
-                        MultiFormatDocumentEngine.saveDocumentBookmarks(context, uriString, updated)
-                        Toast.makeText(
-                            context,
-                            if (isCurrentPositionBookmarked) "تمت إزالة العلامة المرجعية" else "تمت إضافة علامة مرجعية 🔖",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }) {
-                        Icon(
-                            imageVector = if (isCurrentPositionBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                            contentDescription = "علامة مرجعية",
-                            tint = if (isCurrentPositionBookmarked) Color(0xFFF59E0B) else readerTheme.text
-                        )
-                    }
-
-                    // Bookmarks list button
-                    if (bookmarks.isNotEmpty()) {
-                        IconButton(onClick = { showBookmarksSheet = true }) {
-                            Icon(Icons.Default.Bookmarks, contentDescription = "العلامات المرجعية", tint = readerTheme.text)
+                            Text(progressDisplay, fontSize = 9.sp, color = Color.Gray)
                         }
                     }
 
-                    // 3. Search in text / sheets
-                    if (extension !in listOf("pdf")) {
-                        IconButton(onClick = { isSearchActive = !isSearchActive }) {
-                            Icon(Icons.Default.Search, contentDescription = "بحث في المستند", tint = readerTheme.text)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        // 1. Converter studio launcher button
+                        IconButton(
+                            onClick = { showConverterStudioDialog = true },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.Transform, contentDescription = "تحويل وأمان المستند", tint = theme.primaryColor, modifier = Modifier.size(15.dp))
                         }
-                    } else {
+
+                        // 2. Bookmark toggle button
                         IconButton(
                             onClick = {
-                                isPdfContinuousSelectionView = !isPdfContinuousSelectionView
-                            }
-                        ) {
-                            Icon(
-                                imageVector = if (isPdfContinuousSelectionView) Icons.Default.ViewAgenda else Icons.Default.FormatPaint,
-                                contentDescription = "تبديل وضع التحديد والتظليل",
-                                tint = if (isPdfContinuousSelectionView) theme.primaryColor else readerTheme.text
-                            )
-                        }
-                    }
-
-                    // 4. EPUB Chapters Index button
-                    if (extension == "epub" && epubBook != null) {
-                        IconButton(onClick = { showEpubChaptersSheet = true }) {
-                            Icon(Icons.Default.MenuBook, contentDescription = "فهرس الفصول", tint = readerTheme.text)
-                        }
-                    }
-
-                    // DOCMO Local PDF Diagnostic button
-                    if (extension == "pdf") {
-                        IconButton(onClick = {
-                            coroutineScope.launch {
-                                val report = withContext(Dispatchers.IO) {
-                                    DocmoDocumentBridge.inspectPdfLocally(context, uri, fileName)
+                                val currentIdx = currentPositionIndex
+                                val label = when (extension) {
+                                    "pdf" -> "صفحة ${pdfCurrentPage + 1}"
+                                    "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.title ?: "فصل ${epubCurrentChapterIndex + 1}"
+                                    "pptx", "ppt" -> "شريحة ${pptxCurrentSlideIndex + 1}"
+                                    else -> "موضع موثق"
                                 }
-                                pdfDiagnosticReport = report
-                                showPdfDiagnosticDialog = true
-                            }
-                        }) {
-                            Icon(Icons.Default.Verified, contentDescription = "فحص PDF محلي", tint = Color(0xFF0284C7))
-                        }
-                    }
 
-                    // DOCMO Interactive Word (DOCX) Edit toggle
-                    if (extension == "docx") {
-                        IconButton(onClick = { isDocxEditingMode = !isDocxEditingMode }) {
-                            Icon(
-                                imageVector = Icons.Default.EditNote,
-                                contentDescription = "تعديل وحفظ نسخة Word جديدة",
-                                tint = if (isDocxEditingMode) Color(0xFF2563EB) else readerTheme.text
-                            )
-                        }
-                    }
-
-                    // DOCMO Open in External Viewer
-                    IconButton(onClick = {
-                        coroutineScope.launch {
-                            val res = withContext(Dispatchers.IO) {
-                                if (extension == "pdf") {
-                                    DocmoDocumentBridge.openPdfFromUri(context, uri, fileName)
+                                val updated = if (isCurrentPositionBookmarked) {
+                                    bookmarks.filter { it.positionIndex != currentIdx }
                                 } else {
-                                    DocmoDocumentBridge.openDocumentFromUri(context, uri, fileName)
+                                    bookmarks + DocumentBookmarkItem(
+                                        uriString = uriString,
+                                        label = label,
+                                        positionIndex = currentIdx
+                                    )
                                 }
-                            }
-                            if (res.isFailure) {
+                                bookmarks = updated
+                                MultiFormatDocumentEngine.saveDocumentBookmarks(context, uriString, updated)
                                 Toast.makeText(
                                     context,
-                                    res.exceptionOrNull()?.message ?: "تعذر فتح المستند في تطبيق خارجي",
-                                    Toast.LENGTH_LONG
+                                    if (isCurrentPositionBookmarked) "تمت إزالة العلامة المرجعية" else "تمت إضافة علامة مرجعية 🔖",
+                                    Toast.LENGTH_SHORT
                                 ).show()
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isCurrentPositionBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                contentDescription = "علامة مرجعية",
+                                tint = if (isCurrentPositionBookmarked) Color(0xFFF59E0B) else readerTheme.text,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+
+                        // Bookmarks list button
+                        if (bookmarks.isNotEmpty()) {
+                            IconButton(
+                                onClick = { showBookmarksSheet = true },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Bookmarks, contentDescription = "العلامات المرجعية", tint = readerTheme.text, modifier = Modifier.size(15.dp))
                             }
                         }
-                    }) {
-                        Icon(Icons.Default.OpenInNew, contentDescription = "فتح في تطبيق خارجي", tint = readerTheme.text)
-                    }
 
-                    // 5. Format Settings (Font, theme, margins, eye-care)
-                    IconButton(onClick = { showSettingsSheet = true }) {
-                        Icon(Icons.Default.Tune, contentDescription = "إعدادات القراءة", tint = readerTheme.text)
+                        // 3. Search in text / sheets or PDF continuous selection
+                        if (extension !in listOf("pdf")) {
+                            IconButton(
+                                onClick = { isSearchActive = !isSearchActive },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = "بحث في المستند", tint = readerTheme.text, modifier = Modifier.size(15.dp))
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    isPdfContinuousSelectionView = !isPdfContinuousSelectionView
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isPdfContinuousSelectionView) Icons.Default.ViewAgenda else Icons.Default.FormatPaint,
+                                    contentDescription = "تبديل وضع التحديد والتظليل",
+                                    tint = if (isPdfContinuousSelectionView) theme.primaryColor else readerTheme.text,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+
+                        // 4. EPUB Chapters Index button
+                        if (extension == "epub" && epubBook != null) {
+                            IconButton(
+                                onClick = { showEpubChaptersSheet = true },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = "فهرس الفصول", tint = readerTheme.text, modifier = Modifier.size(15.dp))
+                            }
+                        }
+
+                        // DOCMO Local PDF Diagnostic button
+                        if (extension == "pdf") {
+                            IconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val report = withContext(Dispatchers.IO) {
+                                            DocmoDocumentBridge.inspectPdfLocally(context, uri, fileName)
+                                        }
+                                        pdfDiagnosticReport = report
+                                        showPdfDiagnosticDialog = true
+                                    }
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Verified, contentDescription = "فحص PDF محلي", tint = Color(0xFF0284C7), modifier = Modifier.size(15.dp))
+                            }
+                        }
+
+                        // DOCMO Interactive Word (DOCX) Edit toggle
+                        if (extension == "docx") {
+                            IconButton(
+                                onClick = { isDocxEditingMode = !isDocxEditingMode },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EditNote,
+                                    contentDescription = "تعديل وحفظ نسخة Word جديدة",
+                                    tint = if (isDocxEditingMode) Color(0xFF2563EB) else readerTheme.text,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+
+                        // DOCMO Open in External Viewer
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    val res = withContext(Dispatchers.IO) {
+                                        if (extension == "pdf") {
+                                            DocmoDocumentBridge.openPdfFromUri(context, uri, fileName)
+                                        } else {
+                                            DocmoDocumentBridge.openDocumentFromUri(context, uri, fileName)
+                                        }
+                                    }
+                                    if (res.isFailure) {
+                                        Toast.makeText(
+                                            context,
+                                            res.exceptionOrNull()?.message ?: "تعذر فتح المستند في تطبيق خارجي",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.OpenInNew, contentDescription = "فتح في تطبيق خارجي", tint = readerTheme.text, modifier = Modifier.size(15.dp))
+                        }
+
+                        // 5. Format Settings (Font, theme, margins, eye-care)
+                        IconButton(
+                            onClick = { showSettingsSheet = true },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.Tune, contentDescription = "إعدادات القراءة", tint = readerTheme.text, modifier = Modifier.size(15.dp))
+                        }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = readerTheme.surface)
-            )
+                }
+            }
         },
         bottomBar = {
-            // PDF Bottom Page Controller Bar (التنقل بالسكرول الرأسي والأزرار الرأسية بدلاً من السلايدر الأفقي)
+            // Compact Bottom Controller Bar
             if (extension == "pdf" && pdfTotalPages > 0 && !isPdfContinuousSelectionView) {
                 Surface(
                     color = readerTheme.surface,
-                    tonalElevation = 8.dp,
+                    tonalElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
@@ -511,7 +566,7 @@ fun MultiFormatDocumentViewerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -524,31 +579,33 @@ fun MultiFormatDocumentViewerScreen(
                             },
                             enabled = pdfCurrentPage > 0,
                             colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "الصفحة السابقة", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("السابقة ⬆", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "الصفحة السابقة", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("السابقة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = theme.primaryColor.copy(alpha = 0.12f)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Icon(
                                     Icons.Default.SwapVert,
                                     contentDescription = null,
                                     tint = theme.primaryColor,
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(13.dp)
                                 )
                                 Text(
-                                    text = "صفحة ${pdfCurrentPage + 1} من $pdfTotalPages • سكرول رأسي",
-                                    fontSize = 11.sp,
+                                    text = "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages",
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = theme.primaryColor
                                 )
@@ -564,19 +621,20 @@ fun MultiFormatDocumentViewerScreen(
                             },
                             enabled = pdfCurrentPage < pdfTotalPages - 1,
                             colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Text("التالية ⬇", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "الصفحة التالية", modifier = Modifier.size(16.dp))
+                            Text("التالية", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "الصفحة التالية", modifier = Modifier.size(14.dp))
                         }
                     }
                 }
             } else if (extension == "epub" && epubBook != null && epubBook!!.chapters.isNotEmpty()) {
-                // EPUB Bottom Chapter Navigation Bar (التنقل الرأسي بين الفصول)
                 Surface(
                     color = readerTheme.surface,
-                    tonalElevation = 8.dp,
+                    tonalElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
@@ -584,7 +642,7 @@ fun MultiFormatDocumentViewerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -596,24 +654,26 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             },
                             enabled = epubCurrentChapterIndex > 0,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor)
+                            shape = RoundedCornerShape(6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("الفصل السابق ⬆", fontSize = 11.sp)
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("السابق", fontSize = 10.sp)
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = theme.primaryColor.copy(alpha = 0.12f)
                         ) {
                             Text(
-                                text = "فصل ${epubCurrentChapterIndex + 1} من ${epubBook!!.chapters.size} • سكرول",
+                                text = "فصل ${epubCurrentChapterIndex + 1} / ${epubBook!!.chapters.size}",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 color = theme.primaryColor,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
 
@@ -625,20 +685,21 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             },
                             enabled = epubCurrentChapterIndex < epubBook!!.chapters.size - 1,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor)
+                            shape = RoundedCornerShape(6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Text("الفصل التالي ⬇", fontSize = 11.sp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Text("التالي", fontSize = 10.sp)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
             } else if (extension in listOf("pptx", "ppt") && pptxPresentation != null && pptxPresentation!!.slides.isNotEmpty()) {
-                // PowerPoint Slide Navigation Bar (التنقل الرأسي بين الشرائح)
                 Surface(
                     color = readerTheme.surface,
-                    tonalElevation = 8.dp,
+                    tonalElevation = 4.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
@@ -646,7 +707,7 @@ fun MultiFormatDocumentViewerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -658,24 +719,26 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             },
                             enabled = pptxCurrentSlideIndex > 0,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                            shape = RoundedCornerShape(6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("الشريحة السابقة ⬆", fontSize = 11.sp)
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("السابقة", fontSize = 10.sp)
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = Color(0xFFD97706).copy(alpha = 0.12f)
                         ) {
                             Text(
-                                text = "شريحة ${pptxCurrentSlideIndex + 1} من ${pptxPresentation!!.slides.size}",
+                                text = "شريحة ${pptxCurrentSlideIndex + 1} / ${pptxPresentation!!.slides.size}",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 color = Color(0xFFD97706),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
 
@@ -687,12 +750,14 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             },
                             enabled = pptxCurrentSlideIndex < pptxPresentation!!.slides.size - 1,
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706))
+                            shape = RoundedCornerShape(6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                            modifier = Modifier.height(28.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Text("الشريحة التالية ⬇", fontSize = 11.sp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Text("التالية", fontSize = 10.sp)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -1323,7 +1388,7 @@ private fun PdfPageView(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "صفحة PDF",
                 modifier = Modifier
-                    .fillMaxSize(0.96f)
+                    .fillMaxSize(0.99f)
                     .graphicsLayer(
                         scaleX = scale,
                         scaleY = scale,

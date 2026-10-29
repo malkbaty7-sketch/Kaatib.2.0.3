@@ -39,48 +39,48 @@ fun ProjectsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Top Banner Card
+        // Compact Top Banner Card (Dedicated to Project Creation & Management)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(theme.elevationDp, RoundedCornerShape(theme.cornerRadiusDp), spotColor = theme.shadowColor),
-                shape = RoundedCornerShape(theme.cornerRadiusDp),
-                colors = CardDefaults.cardColors(containerColor = theme.surfaceColor)
+            shape = RoundedCornerShape(theme.cornerRadiusDp),
+            colors = CardDefaults.cardColors(containerColor = theme.surfaceColor)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     modifier = Modifier.weight(1f).padding(end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(theme.primaryColor),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.LibraryBooks, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Default.LibraryBooks, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                     Column {
                         Text(
-                            text = "مكتبة المشاريع والكتب (FR-08, FR-09)",
-                            fontSize = 17.sp,
+                            text = "إنشاء وإدارة المشاريع والكتب",
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = theme.textColor
                         )
                         Text(
-                            text = "إدارة وتأليف الكتب الإلكترونية والأبحاث والمستندات",
-                            fontSize = 11.sp,
+                            text = "تأليف الكتب الإلكترونية والأبحاث والروايات والمقالات",
+                            fontSize = 10.sp,
                             color = theme.textColor.copy(alpha = 0.75f)
                         )
                     }
@@ -89,49 +89,14 @@ fun ProjectsScreen(
                 Button(
                     onClick = { showNewProjectDialog = true },
                     colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.height(34.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("مشروع جديد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("مشروع جديد", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-            }
-        }
-
-        // Device Documents & External Library Section (Task 1)
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onOpenDeviceDocuments() }
-                .border(1.dp, theme.primaryColor.copy(alpha = 0.3f), RoundedCornerShape(14.dp)),
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))
-        ) {
-            Row(
-                modifier = Modifier.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF10B981)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("مستندات الجهاز والمكتبة الخارجية 📂", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF065F46))
-                        Surface(color = Color(0xFF10B981), shape = RoundedCornerShape(4.dp)) {
-                            Text("جديد", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
-                        }
-                    }
-                    Text("تصفح وقراءة الكتب الرقمية (PDF, EPUB) ومستندات Word وExcel مع حفظ موضع القراءة تلقائياً", fontSize = 11.sp, color = Color(0xFF047857), lineHeight = 15.sp)
-                }
-                Icon(Icons.Default.ArrowForwardIos, contentDescription = "فتح", tint = Color(0xFF059669), modifier = Modifier.size(14.dp))
             }
         }
 
