@@ -5,42 +5,50 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AppThemeData
@@ -50,17 +58,22 @@ import com.example.data.model.ReaderTheme
 import com.example.ui.MainViewModel
 import com.example.ui.components.ReaderSettingsBar
 import com.example.ui.components.ReaderSettingsBottomSheet
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import com.example.ui.components.TtsPlayerBar
 import com.example.util.AccessDatabaseInfo
 import com.example.util.DocmoDocumentBridge
 import com.example.util.DocumentBookmarkItem
+import com.example.util.DocumentHighlightItem
+import com.example.util.DocumentOutlineItem
+import com.example.util.DocumentParser
 import com.example.util.EpubBookContent
 import com.example.util.MultiFormatDocumentEngine
 import com.example.util.PdfDiagnosticReport
 import com.example.util.PptxPresentationContent
 import com.example.util.SpreadsheetContent
+import com.example.util.TtsManager
+import com.example.util.TtsPlaybackState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -78,7 +91,6 @@ fun MultiFormatDocumentViewerScreen(
     val coroutineScope = rememberCoroutineScope()
     val uri = remember(uriString) { Uri.parse(uriString) }
     val extension = remember(fileName) { MultiFormatDocumentEngine.getFileExtension(fileName) }
-    val category = remember(extension) { MultiFormatDocumentEngine.detectCategory(extension) }
 
     // Saved Progress state from Room
     val savedProgress by viewModel.getDocumentProgress(uriString).collectAsState(initial = null)
@@ -99,17 +111,40 @@ fun MultiFormatDocumentViewerScreen(
     val lineSpacing = readerSettings.lineHeightMultiplier
     val fontWeight = readerSettings.fontWeight
 
+    // UI Sheets & Dialogs
     var showSettingsSheet by remember { mutableStateOf(false) }
-    var showEpubChaptersSheet by remember { mutableStateOf(false) }
+    var showOutlineSheet by remember { mutableStateOf(false) }
     var showBookmarksSheet by remember { mutableStateOf(false) }
     var showConverterStudioDialog by remember { mutableStateOf(false) }
+    var showExtractPdfRangeDialog by remember { mutableStateOf(false) }
 
+    // Upgrade 1: Highlights, Notes & Send-to-Editor Dialog
+    var highlights by remember { mutableStateOf<List<DocumentHighlightItem>>(emptyList()) }
+    var bookmarks by remember { mutableStateOf<List<DocumentBookmarkItem>>(emptyList()) }
+    var activeQuoteDraft by remember { mutableStateOf<String?>(null) }
+    var activeQuoteNote by remember { mutableStateOf("") }
+    var activeQuoteColorHex by remember { mutableStateOf("#FDE047") }
+
+    // Upgrade 2: Smart TTS Voice Reader inside Document Viewer
+    val ttsManager = remember { TtsManager(context) }
+    val ttsPlaybackState by ttsManager.playbackState.collectAsState()
+    val ttsCurrentSentence by ttsManager.currentSentenceText.collectAsState()
+    val ttsCurrentSentenceIndex by ttsManager.currentSentenceIndex.collectAsState()
+    val ttsSpeechRate by ttsManager.speechRate.collectAsState()
+    var showTtsBar by remember { mutableStateOf(false) }
+
+    // Upgrade 3: Immersive Fullscreen, Auto-Scroll, PDF Night/Sepia & Thumbnails Strip
+    var isImmersiveFullscreen by remember { mutableStateOf(false) }
+    var isAutoScrollActive by remember { mutableStateOf(false) }
+    var autoScrollSpeed by remember { mutableIntStateOf(1) } // 1, 2, 3
+    var showPdfThumbnailsStrip by remember { mutableStateOf(false) }
+    var pdfColorFilterOverride by remember { mutableStateOf<String?>(null) } // null = follow readerTheme, "NORMAL", "NIGHT", "SEPIA"
+
+    // Upgrade 4: Interactive Search with Next/Previous match navigation
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
-    var isHorizontalReadingMode by remember { mutableStateOf(false) }
-
-    // Bookmarks list
-    var bookmarks by remember { mutableStateOf<List<DocumentBookmarkItem>>(emptyList()) }
+    var currentSearchMatchIndex by remember { mutableIntStateOf(0) }
+    var pdfExtractedFullText by remember { mutableStateOf("") }
 
     // Format specific states
     // PDF
@@ -123,6 +158,7 @@ fun MultiFormatDocumentViewerScreen(
     // EPUB
     var epubBook by remember { mutableStateOf<EpubBookContent?>(null) }
     var epubCurrentChapterIndex by remember { mutableStateOf(0) }
+    val epubScrollState = rememberScrollState()
 
     // PowerPoint (PPTX)
     var pptxPresentation by remember { mutableStateOf<PptxPresentationContent?>(null) }
@@ -165,7 +201,7 @@ fun MultiFormatDocumentViewerScreen(
 
     var isLoading by remember { mutableStateOf(true) }
 
-    // Determine current position index for bookmarking
+    // Determine current position index & label for bookmarking and highlights
     val currentPositionIndex = when (extension) {
         "pdf" -> pdfCurrentPage
         "epub" -> epubCurrentChapterIndex
@@ -173,8 +209,102 @@ fun MultiFormatDocumentViewerScreen(
         else -> textScrollState.value
     }
 
+    val currentPositionLabel = when (extension) {
+        "pdf" -> "صفحة ${pdfCurrentPage + 1}"
+        "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.title ?: "فصل ${epubCurrentChapterIndex + 1}"
+        "pptx", "ppt" -> "شريحة ${pptxCurrentSlideIndex + 1}"
+        else -> {
+            val pct = if (textScrollState.maxValue > 0) ((textScrollState.value.toFloat() / textScrollState.maxValue) * 100).toInt() else 0
+            "موضع $pct%"
+        }
+    }
+
     val isCurrentPositionBookmarked = remember(bookmarks, currentPositionIndex) {
         bookmarks.any { it.positionIndex == currentPositionIndex }
+    }
+
+    // Active readable text for TTS, Search, and Quotes
+    val currentReadableText = remember(
+        extension,
+        epubBook,
+        epubCurrentChapterIndex,
+        pptxPresentation,
+        pptxCurrentSlideIndex,
+        textDocumentContent,
+        pdfExtractedFullText
+    ) {
+        when (extension) {
+            "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.textContent ?: ""
+            "pptx", "ppt" -> pptxPresentation?.slides?.getOrNull(pptxCurrentSlideIndex)?.textContent ?: ""
+            "pdf" -> pdfExtractedFullText
+            else -> textDocumentContent
+        }
+    }
+
+    // Auto Outline / Table of Contents
+    val documentOutline = remember(
+        extension,
+        epubBook,
+        pptxPresentation,
+        docxParagraphs,
+        textDocumentContent,
+        pdfTotalPages
+    ) {
+        MultiFormatDocumentEngine.extractDocumentOutline(
+            extension = extension,
+            epubBook = epubBook,
+            pptxPresentation = pptxPresentation,
+            docxParagraphs = docxParagraphs,
+            textDocumentContent = textDocumentContent,
+            pdfTotalPages = pdfTotalPages
+        )
+    }
+
+    // Search match positions
+    val searchMatchOffsets = remember(currentReadableText, searchQuery) {
+        if (searchQuery.isBlank() || currentReadableText.isBlank()) {
+            emptyList()
+        } else {
+            val regex = Regex(Regex.escape(searchQuery.trim()), RegexOption.IGNORE_CASE)
+            regex.findAll(currentReadableText).map { it.range.first }.toList()
+        }
+    }
+
+    LaunchedEffect(searchQuery) {
+        currentSearchMatchIndex = 0
+    }
+
+    // Auto-scroll effect
+    LaunchedEffect(isAutoScrollActive, autoScrollSpeed, extension) {
+        while (isAutoScrollActive) {
+            delay(45L)
+            val step = autoScrollSpeed * 2
+            when (extension) {
+                "epub" -> {
+                    if (epubScrollState.value < epubScrollState.maxValue) {
+                        epubScrollState.scrollTo((epubScrollState.value + step).coerceAtMost(epubScrollState.maxValue))
+                    } else {
+                        isAutoScrollActive = false
+                    }
+                }
+                "pdf" -> {
+                    // For PDF page view, advance page every few seconds
+                    delay(3500L / autoScrollSpeed.coerceAtLeast(1))
+                    if (pdfCurrentPage < pdfTotalPages - 1) {
+                        pdfCurrentPage++
+                    } else {
+                        isAutoScrollActive = false
+                    }
+                }
+                else -> {
+                    if (textScrollState.value < textScrollState.maxValue) {
+                        textScrollState.scrollTo((textScrollState.value + step).coerceAtMost(textScrollState.maxValue))
+                    } else {
+                        isAutoScrollActive = false
+                    }
+                }
+            }
+        }
     }
 
     // Save progress helper
@@ -219,23 +349,30 @@ fun MultiFormatDocumentViewerScreen(
         }
     }
 
-    // Auto-save on back or disposal
+    // Auto-save on back or disposal & cleanup TTS
     DisposableEffect(Unit) {
         onDispose {
+            ttsManager.shutdown()
             saveCurrentProgress()
         }
     }
 
     BackHandler {
-        saveCurrentProgress()
-        onBack()
+        if (isImmersiveFullscreen) {
+            isImmersiveFullscreen = false
+        } else {
+            ttsManager.stop()
+            saveCurrentProgress()
+            onBack()
+        }
     }
 
-    // Load Document Content & Initial Progress & Bookmarks
+    // Load Document Content & Initial Progress & Bookmarks & Highlights
     LaunchedEffect(uriString) {
         isLoading = true
         withContext(Dispatchers.IO) {
             bookmarks = MultiFormatDocumentEngine.getDocumentBookmarks(context, uriString)
+            highlights = MultiFormatDocumentEngine.getDocumentHighlights(context, uriString)
             val initialSaved = viewModel.getDocumentProgressSync(uriString)
             when (extension) {
                 "pdf" -> {
@@ -243,6 +380,10 @@ fun MultiFormatDocumentViewerScreen(
                     val startPage = initialSaved?.lastPageIndex?.coerceIn(0, (pdfTotalPages - 1).coerceAtLeast(0)) ?: 0
                     pdfCurrentPage = startPage
                     pdfBitmap = MultiFormatDocumentEngine.renderPdfPage(context, uri, startPage)
+                    // Extract text in background for TTS / Quotes / Search
+                    try {
+                        pdfExtractedFullText = DocumentParser.parseUri(context, uri).text
+                    } catch (_: Exception) {}
                 }
                 "epub" -> {
                     val book = MultiFormatDocumentEngine.parseEpub(context, uri)
@@ -317,456 +458,780 @@ fun MultiFormatDocumentViewerScreen(
         }
     }
 
+    // Determine effective PDF Color Mode (Normal, Night Dark Inversion, Sepia Warm Paper)
+    val effectivePdfColorMode = remember(pdfColorFilterOverride, readerTheme) {
+        pdfColorFilterOverride ?: when (readerTheme) {
+            ReaderTheme.DARK -> "NIGHT"
+            ReaderTheme.SEPIA -> "SEPIA"
+            else -> "NORMAL"
+        }
+    }
+
     Scaffold(
         topBar = {
-            Surface(
-                color = readerTheme.surface,
-                shadowElevation = 2.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.weight(1f)
+            AnimatedVisibility(visible = !isImmersiveFullscreen) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        color = readerTheme.surface,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .statusBarsPadding()
                     ) {
-                        IconButton(
-                            onClick = {
-                                saveCurrentProgress()
-                                onBack()
-                            },
-                            modifier = Modifier.size(28.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "رجوع",
-                                tint = readerTheme.text,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        ttsManager.stop()
+                                        saveCurrentProgress()
+                                        onBack()
+                                    },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "رجوع",
+                                        tint = readerTheme.text,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
 
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = theme.primaryColor.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = extension.uppercase(),
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = theme.primaryColor,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
-                        }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = theme.primaryColor.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = extension.uppercase(),
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = theme.primaryColor,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = fileName,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = readerTheme.text
-                            )
-                            val progressDisplay = when (extension) {
-                                "pdf" -> if (pdfTotalPages > 0) "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages" else "PDF"
-                                "epub" -> epubBook?.let { "فصل ${epubCurrentChapterIndex + 1} / ${it.chapters.size}" } ?: "EPUB"
-                                "pptx", "ppt" -> pptxPresentation?.let { "شريحة ${pptxCurrentSlideIndex + 1} / ${it.slides.size}" } ?: "PowerPoint"
-                                else -> {
-                                    val pct = if (textScrollState.maxValue > 0) {
-                                        ((textScrollState.value.toFloat() / textScrollState.maxValue.toFloat()) * 100).toInt()
-                                    } else 0
-                                    "تقدم: $pct%"
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = fileName,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = readerTheme.text
+                                    )
+                                    val progressDisplay = when (extension) {
+                                        "pdf" -> if (pdfTotalPages > 0) "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages" else "PDF"
+                                        "epub" -> epubBook?.let { "فصل ${epubCurrentChapterIndex + 1} / ${it.chapters.size}" } ?: "EPUB"
+                                        "pptx", "ppt" -> pptxPresentation?.let { "شريحة ${pptxCurrentSlideIndex + 1} / ${it.slides.size}" } ?: "PowerPoint"
+                                        else -> {
+                                            val pct = if (textScrollState.maxValue > 0) {
+                                                ((textScrollState.value.toFloat() / textScrollState.maxValue.toFloat()) * 100).toInt()
+                                            } else 0
+                                            "تقدم: $pct%"
+                                        }
+                                    }
+                                    Text(progressDisplay, fontSize = 8.sp, color = Color.Gray)
                                 }
                             }
-                            Text(progressDisplay, fontSize = 9.sp, color = Color.Gray)
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(1.dp)
+                            ) {
+                                // 1. Add Highlight / Quote / Send to Editor button
+                                IconButton(
+                                    onClick = {
+                                        val sampleSnippet = when (extension) {
+                                            "pdf" -> {
+                                                val lines = pdfExtractedFullText.lines().filter { it.isNotBlank() }
+                                                lines.drop((pdfCurrentPage * 4).coerceAtMost((lines.size - 1).coerceAtLeast(0)))
+                                                    .take(4)
+                                                    .joinToString(" ")
+                                                    .ifBlank { "اقتباس من $fileName (صفحة ${pdfCurrentPage + 1})" }
+                                            }
+                                            "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.textContent?.take(220) ?: ""
+                                            "pptx", "ppt" -> pptxPresentation?.slides?.getOrNull(pptxCurrentSlideIndex)?.textContent?.take(220) ?: ""
+                                            else -> textDocumentContent.take(220)
+                                        }
+                                        activeQuoteDraft = sampleSnippet.ifBlank { "اقتباس مرجعي من $fileName" }
+                                        activeQuoteNote = ""
+                                    },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.FormatQuote,
+                                        contentDescription = "تظليل واقتباس للمحرر",
+                                        tint = Color(0xFFD97706),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+
+                                // 2. Smart Voice Reader (TTS)
+                                IconButton(
+                                    onClick = {
+                                        if (showTtsBar && ttsPlaybackState == TtsPlaybackState.PLAYING) {
+                                            ttsManager.pause()
+                                        } else {
+                                            val textToRead = currentReadableText.ifBlank {
+                                                "مستند $fileName، $currentPositionLabel"
+                                            }
+                                            ttsManager.prepareText(textToRead)
+                                            ttsManager.play()
+                                            showTtsBar = true
+                                        }
+                                    },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.RecordVoiceOver,
+                                        contentDescription = "القارئ الصوتي الذكي",
+                                        tint = if (showTtsBar) Color(0xFF16A34A) else readerTheme.text,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+
+                                // 3. Auto-Scroll toggle
+                                IconButton(
+                                    onClick = {
+                                        if (!isAutoScrollActive) {
+                                            isAutoScrollActive = true
+                                            autoScrollSpeed = 1
+                                            Toast.makeText(context, "تم تفعيل التمرير التلقائي (السرعة 1x) ✨", Toast.LENGTH_SHORT).show()
+                                        } else if (autoScrollSpeed < 3) {
+                                            autoScrollSpeed++
+                                            Toast.makeText(context, "سرعة التمرير التلقائي: ${autoScrollSpeed}x", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            isAutoScrollActive = false
+                                            Toast.makeText(context, "تم إيقاف التمرير التلقائي", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.SwipeVertical,
+                                        contentDescription = "التمرير التلقائي",
+                                        tint = if (isAutoScrollActive) theme.primaryColor else readerTheme.text,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+
+                                // 4. Bookmark toggle button
+                                IconButton(
+                                    onClick = {
+                                        val currentIdx = currentPositionIndex
+                                        val updated = if (isCurrentPositionBookmarked) {
+                                            bookmarks.filter { it.positionIndex != currentIdx }
+                                        } else {
+                                            bookmarks + DocumentBookmarkItem(
+                                                uriString = uriString,
+                                                label = currentPositionLabel,
+                                                positionIndex = currentIdx
+                                            )
+                                        }
+                                        bookmarks = updated
+                                        MultiFormatDocumentEngine.saveDocumentBookmarks(context, uriString, updated)
+                                        Toast.makeText(
+                                            context,
+                                            if (isCurrentPositionBookmarked) "تمت إزالة العلامة المرجعية" else "تمت إضافة علامة مرجعية 🔖",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isCurrentPositionBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                        contentDescription = "علامة مرجعية",
+                                        tint = if (isCurrentPositionBookmarked) Color(0xFFF59E0B) else readerTheme.text,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+
+                                // 5. Notebook (Highlights + Notes + Bookmarks) Sheet
+                                IconButton(
+                                    onClick = { showBookmarksSheet = true },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Bookmarks,
+                                        contentDescription = "دفتر الملاحظات والاقتباسات",
+                                        tint = if (highlights.isNotEmpty() || bookmarks.isNotEmpty()) theme.primaryColor else readerTheme.text,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+
+                                // 6. Search in Document
+                                IconButton(
+                                    onClick = { isSearchActive = !isSearchActive },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = "بحث في المستند",
+                                        tint = if (isSearchActive) theme.primaryColor else readerTheme.text,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+
+                                // 7. Auto Outline / Table of Contents (TOC)
+                                if (documentOutline.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { showOutlineSheet = true },
+                                        modifier = Modifier.size(26.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Toc,
+                                            contentDescription = "فهرس المحتويات والعناوين",
+                                            tint = readerTheme.text,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                }
+
+                                // 8. PDF Specific Actions (Selection mode / Page Range Extract)
+                                if (extension == "pdf") {
+                                    IconButton(
+                                        onClick = { isPdfContinuousSelectionView = !isPdfContinuousSelectionView },
+                                        modifier = Modifier.size(26.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isPdfContinuousSelectionView) Icons.Default.ViewAgenda else Icons.Default.FormatPaint,
+                                            contentDescription = "تبديل وضع التحديد والتظليل",
+                                            tint = if (isPdfContinuousSelectionView) theme.primaryColor else readerTheme.text,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { showExtractPdfRangeDialog = true },
+                                        modifier = Modifier.size(26.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ContentCut,
+                                            contentDescription = "استخراج صفحات محددة كملف PDF",
+                                            tint = Color(0xFF0284C7),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+
+                                // 9. Converter Studio
+                                IconButton(
+                                    onClick = { showConverterStudioDialog = true },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(Icons.Default.Transform, contentDescription = "تحويل وأمان المستند", tint = theme.primaryColor, modifier = Modifier.size(14.dp))
+                                }
+
+                                // 10. Immersive Fullscreen Toggle
+                                IconButton(
+                                    onClick = { isImmersiveFullscreen = true },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(Icons.Default.Fullscreen, contentDescription = "وضع ملء الشاشة الغامر", tint = readerTheme.text, modifier = Modifier.size(15.dp))
+                                }
+
+                                // 11. Format Settings
+                                IconButton(
+                                    onClick = { showSettingsSheet = true },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(Icons.Default.Tune, contentDescription = "إعدادات القراءة", tint = readerTheme.text, modifier = Modifier.size(14.dp))
+                                }
+                            }
                         }
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(1.dp)
-                    ) {
-                        // 1. Converter studio launcher button
-                        IconButton(
-                            onClick = { showConverterStudioDialog = true },
-                            modifier = Modifier.size(28.dp)
+                    // Interactive Search Bar with Next/Previous Match & Counter
+                    AnimatedVisibility(visible = isSearchActive) {
+                        Surface(
+                            color = readerTheme.surface,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Default.Transform, contentDescription = "تحويل وأمان المستند", tint = theme.primaryColor, modifier = Modifier.size(15.dp))
-                        }
-
-                        // 2. Bookmark toggle button
-                        IconButton(
-                            onClick = {
-                                val currentIdx = currentPositionIndex
-                                val label = when (extension) {
-                                    "pdf" -> "صفحة ${pdfCurrentPage + 1}"
-                                    "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.title ?: "فصل ${epubCurrentChapterIndex + 1}"
-                                    "pptx", "ppt" -> "شريحة ${pptxCurrentSlideIndex + 1}"
-                                    else -> "موضع موثق"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = readerTheme.bg,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.35f)),
+                                    modifier = Modifier.weight(1f).height(30.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Search, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(14.dp))
+                                        androidx.compose.foundation.text.BasicTextField(
+                                            value = searchQuery,
+                                            onValueChange = { searchQuery = it },
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = readerTheme.text),
+                                            modifier = Modifier.weight(1f),
+                                            decorationBox = { inner ->
+                                                if (searchQuery.isEmpty()) {
+                                                    Text("ابحث عن كلمة أو عبارة داخل المستند...", fontSize = 10.sp, color = Color.Gray)
+                                                }
+                                                inner()
+                                            }
+                                        )
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(20.dp)) {
+                                                Icon(Icons.Default.Clear, contentDescription = "مسح", tint = Color.Gray, modifier = Modifier.size(12.dp))
+                                            }
+                                        }
+                                    }
                                 }
 
-                                val updated = if (isCurrentPositionBookmarked) {
-                                    bookmarks.filter { it.positionIndex != currentIdx }
-                                } else {
-                                    bookmarks + DocumentBookmarkItem(
-                                        uriString = uriString,
-                                        label = label,
-                                        positionIndex = currentIdx
+                                // Match counter badge
+                                val totalMatches = searchMatchOffsets.size
+                                val displayIdx = if (totalMatches > 0) (currentSearchMatchIndex % totalMatches) + 1 else 0
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (totalMatches > 0) theme.primaryColor.copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = "$displayIdx / $totalMatches",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (totalMatches > 0) theme.primaryColor else Color.Gray,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                     )
                                 }
-                                bookmarks = updated
-                                MultiFormatDocumentEngine.saveDocumentBookmarks(context, uriString, updated)
-                                Toast.makeText(
-                                    context,
-                                    if (isCurrentPositionBookmarked) "تمت إزالة العلامة المرجعية" else "تمت إضافة علامة مرجعية 🔖",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isCurrentPositionBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                contentDescription = "علامة مرجعية",
-                                tint = if (isCurrentPositionBookmarked) Color(0xFFF59E0B) else readerTheme.text,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
 
-                        // Bookmarks list button
-                        if (bookmarks.isNotEmpty()) {
-                            IconButton(
-                                onClick = { showBookmarksSheet = true },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.Bookmarks, contentDescription = "العلامات المرجعية", tint = readerTheme.text, modifier = Modifier.size(15.dp))
-                            }
-                        }
-
-                        // 3. Search in text / sheets or PDF continuous selection
-                        if (extension !in listOf("pdf")) {
-                            IconButton(
-                                onClick = { isSearchActive = !isSearchActive },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.Search, contentDescription = "بحث في المستند", tint = readerTheme.text, modifier = Modifier.size(15.dp))
-                            }
-                        } else {
-                            IconButton(
-                                onClick = {
-                                    isPdfContinuousSelectionView = !isPdfContinuousSelectionView
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isPdfContinuousSelectionView) Icons.Default.ViewAgenda else Icons.Default.FormatPaint,
-                                    contentDescription = "تبديل وضع التحديد والتظليل",
-                                    tint = if (isPdfContinuousSelectionView) theme.primaryColor else readerTheme.text,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            }
-                        }
-
-                        // 4. EPUB Chapters Index button
-                        if (extension == "epub" && epubBook != null) {
-                            IconButton(
-                                onClick = { showEpubChaptersSheet = true },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.MenuBook, contentDescription = "فهرس الفصول", tint = readerTheme.text, modifier = Modifier.size(15.dp))
-                            }
-                        }
-
-                        // DOCMO Local PDF Diagnostic button
-                        if (extension == "pdf") {
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        val report = withContext(Dispatchers.IO) {
-                                            DocmoDocumentBridge.inspectPdfLocally(context, uri, fileName)
+                                // Previous Match
+                                IconButton(
+                                    onClick = {
+                                        if (totalMatches > 0) {
+                                            currentSearchMatchIndex = (currentSearchMatchIndex - 1 + totalMatches) % totalMatches
+                                            val charPos = searchMatchOffsets[currentSearchMatchIndex]
+                                            val ratio = charPos.toFloat() / currentReadableText.length.coerceAtLeast(1)
+                                            coroutineScope.launch {
+                                                if (extension == "epub") {
+                                                    epubScrollState.animateScrollTo((ratio * epubScrollState.maxValue).toInt())
+                                                } else if (extension == "pdf" && pdfTotalPages > 0) {
+                                                    pdfCurrentPage = (ratio * pdfTotalPages).toInt().coerceIn(0, pdfTotalPages - 1)
+                                                } else {
+                                                    textScrollState.animateScrollTo((ratio * textScrollState.maxValue).toInt())
+                                                }
+                                            }
                                         }
-                                        pdfDiagnosticReport = report
-                                        showPdfDiagnosticDialog = true
-                                    }
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.Verified, contentDescription = "فحص PDF محلي", tint = Color(0xFF0284C7), modifier = Modifier.size(15.dp))
-                            }
-                        }
-
-                        // DOCMO Interactive Word (DOCX) Edit toggle
-                        if (extension == "docx") {
-                            IconButton(
-                                onClick = { isDocxEditingMode = !isDocxEditingMode },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.EditNote,
-                                    contentDescription = "تعديل وحفظ نسخة Word جديدة",
-                                    tint = if (isDocxEditingMode) Color(0xFF2563EB) else readerTheme.text,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            }
-                        }
-
-                        // DOCMO Open in External Viewer
-                        IconButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    val res = withContext(Dispatchers.IO) {
-                                        if (extension == "pdf") {
-                                            DocmoDocumentBridge.openPdfFromUri(context, uri, fileName)
-                                        } else {
-                                            DocmoDocumentBridge.openDocumentFromUri(context, uri, fileName)
-                                        }
-                                    }
-                                    if (res.isFailure) {
-                                        Toast.makeText(
-                                            context,
-                                            res.exceptionOrNull()?.message ?: "تعذر فتح المستند في تطبيق خارجي",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
+                                    },
+                                    enabled = totalMatches > 0,
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "النتيجة السابقة", tint = readerTheme.text, modifier = Modifier.size(16.dp))
                                 }
-                            },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.OpenInNew, contentDescription = "فتح في تطبيق خارجي", tint = readerTheme.text, modifier = Modifier.size(15.dp))
-                        }
 
-                        // 5. Format Settings (Font, theme, margins, eye-care)
-                        IconButton(
-                            onClick = { showSettingsSheet = true },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.Tune, contentDescription = "إعدادات القراءة", tint = readerTheme.text, modifier = Modifier.size(15.dp))
+                                // Next Match
+                                IconButton(
+                                    onClick = {
+                                        if (totalMatches > 0) {
+                                            currentSearchMatchIndex = (currentSearchMatchIndex + 1) % totalMatches
+                                            val charPos = searchMatchOffsets[currentSearchMatchIndex]
+                                            val ratio = charPos.toFloat() / currentReadableText.length.coerceAtLeast(1)
+                                            coroutineScope.launch {
+                                                if (extension == "epub") {
+                                                    epubScrollState.animateScrollTo((ratio * epubScrollState.maxValue).toInt())
+                                                } else if (extension == "pdf" && pdfTotalPages > 0) {
+                                                    pdfCurrentPage = (ratio * pdfTotalPages).toInt().coerceIn(0, pdfTotalPages - 1)
+                                                } else {
+                                                    textScrollState.animateScrollTo((ratio * textScrollState.maxValue).toInt())
+                                                }
+                                            }
+                                        }
+                                    },
+                                    enabled = totalMatches > 0,
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "النتيجة التالية", tint = readerTheme.text, modifier = Modifier.size(16.dp))
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        isSearchActive = false
+                                        searchQuery = ""
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "إغلاق البحث", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                }
+                            }
                         }
                     }
                 }
             }
         },
         bottomBar = {
-            // Compact Bottom Controller Bar
-            if (extension == "pdf" && pdfTotalPages > 0 && !isPdfContinuousSelectionView) {
-                Surface(
-                    color = readerTheme.surface,
-                    tonalElevation = 4.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = {
-                                if (pdfCurrentPage > 0) {
-                                    pdfCurrentPage--
-                                    saveCurrentProgress()
-                                }
-                            },
-                            enabled = pdfCurrentPage > 0,
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "الصفحة السابقة", modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("السابقة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
+            AnimatedVisibility(visible = !isImmersiveFullscreen) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Floating TTS Player Bar when active
+                    if (showTtsBar) {
+                        TtsPlayerBar(
+                            playbackState = ttsPlaybackState,
+                            currentSentence = ttsCurrentSentence,
+                            currentSentenceIndex = ttsCurrentSentenceIndex,
+                            currentSpeed = ttsSpeechRate,
+                            theme = theme,
+                            onPlay = { ttsManager.play() },
+                            onPause = { ttsManager.pause() },
+                            onSeekForward = { ttsManager.seekForward() },
+                            onSeekBackward = { ttsManager.seekBackward() },
+                            onSpeedChange = { ttsManager.setSpeed(it) },
+                            onClose = {
+                                ttsManager.stop()
+                                showTtsBar = false
+                            }
+                        )
+                    }
 
+                    // PDF Page Thumbnails Strip & Fast Seekbar
+                    if (extension == "pdf" && pdfTotalPages > 1 && showPdfThumbnailsStrip && !isPdfContinuousSelectionView) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = theme.primaryColor.copy(alpha = 0.12f)
+                            color = readerTheme.surface,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 4.dp,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Icon(
-                                    Icons.Default.SwapVert,
-                                    contentDescription = null,
-                                    tint = theme.primaryColor,
-                                    modifier = Modifier.size(13.dp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "شريط مصغرات الصفحات والتنقل السريع (${pdfCurrentPage + 1} / $pdfTotalPages)",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = theme.primaryColor
+                                    )
+                                    Text(
+                                        text = "إخفاء ▼",
+                                        fontSize = 9.sp,
+                                        color = Color.Gray,
+                                        modifier = Modifier.clickable { showPdfThumbnailsStrip = false }
+                                    )
+                                }
+
+                                // Fast Page Seekbar Slider
+                                Slider(
+                                    value = pdfCurrentPage.toFloat(),
+                                    onValueChange = { newVal ->
+                                        pdfCurrentPage = newVal.toInt().coerceIn(0, pdfTotalPages - 1)
+                                    },
+                                    valueRange = 0f..(pdfTotalPages - 1).coerceAtLeast(1).toFloat(),
+                                    modifier = Modifier.fillMaxWidth().height(22.dp),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = theme.primaryColor,
+                                        activeTrackColor = theme.primaryColor
+                                    )
                                 )
-                                Text(
-                                    text = "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = theme.primaryColor
-                                )
+
+                                // Horizontal Page Thumbnail Cards
+                                val pagesList = remember(pdfTotalPages) { (0 until pdfTotalPages).toList() }
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(pagesList, key = { it }) { pageIdx ->
+                                        val isCurrent = pageIdx == pdfCurrentPage
+                                        PdfPageThumbnailCard(
+                                            uri = uri,
+                                            pageIndex = pageIdx,
+                                            isSelected = isCurrent,
+                                            primaryColor = theme.primaryColor,
+                                            onClick = {
+                                                pdfCurrentPage = pageIdx
+                                                saveCurrentProgress()
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
-
-                        Button(
-                            onClick = {
-                                if (pdfCurrentPage < pdfTotalPages - 1) {
-                                    pdfCurrentPage++
-                                    saveCurrentProgress()
-                                }
-                            },
-                            enabled = pdfCurrentPage < pdfTotalPages - 1,
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("التالية", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "الصفحة التالية", modifier = Modifier.size(14.dp))
-                        }
                     }
-                }
-            } else if (extension == "epub" && epubBook != null && epubBook!!.chapters.isNotEmpty()) {
-                Surface(
-                    color = readerTheme.surface,
-                    tonalElevation = 4.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = {
-                                if (epubCurrentChapterIndex > 0) {
-                                    epubCurrentChapterIndex--
-                                    saveCurrentProgress()
-                                }
-                            },
-                            enabled = epubCurrentChapterIndex > 0,
-                            shape = RoundedCornerShape(6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("السابق", fontSize = 10.sp)
-                        }
 
+                    // Compact Bottom Controller Bar
+                    if (extension == "pdf" && pdfTotalPages > 0 && !isPdfContinuousSelectionView) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = theme.primaryColor.copy(alpha = 0.12f)
+                            color = readerTheme.surface,
+                            tonalElevation = 4.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
                         ) {
-                            Text(
-                                text = "فصل ${epubCurrentChapterIndex + 1} / ${epubBook!!.chapters.size}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                color = theme.primaryColor,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
-
-                        Button(
-                            onClick = {
-                                if (epubCurrentChapterIndex < epubBook!!.chapters.size - 1) {
-                                    epubCurrentChapterIndex++
-                                    saveCurrentProgress()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (pdfCurrentPage > 0) {
+                                            pdfCurrentPage--
+                                            saveCurrentProgress()
+                                        }
+                                    },
+                                    enabled = pdfCurrentPage > 0,
+                                    colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.height(26.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "الصفحة السابقة", modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("السابقة", fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 }
-                            },
-                            enabled = epubCurrentChapterIndex < epubBook!!.chapters.size - 1,
-                            shape = RoundedCornerShape(6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("التالي", fontSize = 10.sp)
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                }
-            } else if (extension in listOf("pptx", "ppt") && pptxPresentation != null && pptxPresentation!!.slides.isNotEmpty()) {
-                Surface(
-                    color = readerTheme.surface,
-                    tonalElevation = 4.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = {
-                                if (pptxCurrentSlideIndex > 0) {
-                                    pptxCurrentSlideIndex--
-                                    saveCurrentProgress()
-                                }
-                            },
-                            enabled = pptxCurrentSlideIndex > 0,
-                            shape = RoundedCornerShape(6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("السابقة", fontSize = 10.sp)
-                        }
 
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    // Clickable Page Badge that toggles Thumbnails & Slider Strip
+                                    Surface(
+                                        onClick = { showPdfThumbnailsStrip = !showPdfThumbnailsStrip },
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (showPdfThumbnailsStrip) theme.primaryColor else theme.primaryColor.copy(alpha = 0.12f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.GridOn,
+                                                contentDescription = "مصغرات الصفحات",
+                                                tint = if (showPdfThumbnailsStrip) Color.White else theme.primaryColor,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Text(
+                                                text = "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (showPdfThumbnailsStrip) Color.White else theme.primaryColor
+                                            )
+                                        }
+                                    }
+
+                                    // Smart PDF Night / Sepia Mode Toggle Chip
+                                    Surface(
+                                        onClick = {
+                                            pdfColorFilterOverride = when (effectivePdfColorMode) {
+                                                "NORMAL" -> "NIGHT"
+                                                "NIGHT" -> "SEPIA"
+                                                else -> "NORMAL"
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = when (effectivePdfColorMode) {
+                                            "NIGHT" -> Color(0xFF1E293B)
+                                            "SEPIA" -> Color(0xFFFEF3C7)
+                                            else -> Color(0xFFF1F5F9)
+                                        },
+                                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.3f))
+                                    ) {
+                                        val modeLabel = when (effectivePdfColorMode) {
+                                            "NIGHT" -> "🌙 ليلي"
+                                            "SEPIA" -> "📜 دافئ"
+                                            else -> "☀️ عادي"
+                                        }
+                                        val modeTextColor = when (effectivePdfColorMode) {
+                                            "NIGHT" -> Color.White
+                                            "SEPIA" -> Color(0xFF92400E)
+                                            else -> Color(0xFF334155)
+                                        }
+                                        Text(
+                                            text = modeLabel,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = modeTextColor,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+
+                                Button(
+                                    onClick = {
+                                        if (pdfCurrentPage < pdfTotalPages - 1) {
+                                            pdfCurrentPage++
+                                            saveCurrentProgress()
+                                        }
+                                    },
+                                    enabled = pdfCurrentPage < pdfTotalPages - 1,
+                                    colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.height(26.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("التالية", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "الصفحة التالية", modifier = Modifier.size(13.dp))
+                                }
+                            }
+                        }
+                    } else if (extension == "epub" && epubBook != null && epubBook!!.chapters.isNotEmpty()) {
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFD97706).copy(alpha = 0.12f)
+                            color = readerTheme.surface,
+                            tonalElevation = 4.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
                         ) {
-                            Text(
-                                text = "شريحة ${pptxCurrentSlideIndex + 1} / ${pptxPresentation!!.slides.size}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                color = Color(0xFFD97706),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
-
-                        Button(
-                            onClick = {
-                                if (pptxCurrentSlideIndex < pptxPresentation!!.slides.size - 1) {
-                                    pptxCurrentSlideIndex++
-                                    saveCurrentProgress()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (epubCurrentChapterIndex > 0) {
+                                            epubCurrentChapterIndex--
+                                            saveCurrentProgress()
+                                        }
+                                    },
+                                    enabled = epubCurrentChapterIndex > 0,
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                                    modifier = Modifier.height(28.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("السابق", fontSize = 10.sp)
                                 }
-                            },
-                            enabled = pptxCurrentSlideIndex < pptxPresentation!!.slides.size - 1,
-                            shape = RoundedCornerShape(6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
-                            modifier = Modifier.height(28.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("التالية", fontSize = 10.sp)
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
+
+                                Surface(
+                                    onClick = { showOutlineSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = theme.primaryColor.copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = "فصل ${epubCurrentChapterIndex + 1} / ${epubBook!!.chapters.size}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        color = theme.primaryColor,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        if (epubCurrentChapterIndex < epubBook!!.chapters.size - 1) {
+                                            epubCurrentChapterIndex++
+                                            saveCurrentProgress()
+                                        }
+                                    },
+                                    enabled = epubCurrentChapterIndex < epubBook!!.chapters.size - 1,
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                                    modifier = Modifier.height(28.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("التالي", fontSize = 10.sp)
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                                }
+                            }
                         }
+                    } else if (extension in listOf("pptx", "ppt") && pptxPresentation != null && pptxPresentation!!.slides.isNotEmpty()) {
+                        Surface(
+                            color = readerTheme.surface,
+                            tonalElevation = 4.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (pptxCurrentSlideIndex > 0) {
+                                            pptxCurrentSlideIndex--
+                                            saveCurrentProgress()
+                                        }
+                                    },
+                                    enabled = pptxCurrentSlideIndex > 0,
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                                    modifier = Modifier.height(28.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("السابقة", fontSize = 10.sp)
+                                }
+
+                                Surface(
+                                    onClick = { showOutlineSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFD97706).copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = "شريحة ${pptxCurrentSlideIndex + 1} / ${pptxPresentation!!.slides.size}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFD97706),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+
+                                Button(
+                                    onClick = {
+                                        if (pptxCurrentSlideIndex < pptxPresentation!!.slides.size - 1) {
+                                            pptxCurrentSlideIndex++
+                                            saveCurrentProgress()
+                                        }
+                                    },
+                                    enabled = pptxCurrentSlideIndex < pptxPresentation!!.slides.size - 1,
+                                    shape = RoundedCornerShape(6.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                                    modifier = Modifier.height(28.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("التالية", fontSize = 10.sp)
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+                    } else if (extension !in listOf("pdf", "xlsx", "xls", "csv")) {
+                        ReaderSettingsBar(
+                            settingsState = readerSettings,
+                            onSettingsChanged = { readerSettings = it },
+                            onOpenFullSettings = { showSettingsSheet = true }
+                        )
                     }
                 }
-            } else if (extension !in listOf("pdf", "xlsx", "xls", "csv")) {
-                ReaderSettingsBar(
-                    settingsState = readerSettings,
-                    onSettingsChanged = { readerSettings = it },
-                    onOpenFullSettings = { showSettingsSheet = true }
-                )
             }
         },
         containerColor = readerTheme.bg
@@ -793,7 +1258,8 @@ fun MultiFormatDocumentViewerScreen(
                                 initialPageIndex = pdfCurrentPage,
                                 onBack = { isPdfContinuousSelectionView = false },
                                 onCopyText = { selectedText ->
-                                    Toast.makeText(context, "تم نسخ النص المحدد", Toast.LENGTH_SHORT).show()
+                                    activeQuoteDraft = selectedText
+                                    activeQuoteNote = ""
                                 },
                                 onSaveProgress = { pageIndex, _ ->
                                     pdfCurrentPage = pageIndex
@@ -805,9 +1271,13 @@ fun MultiFormatDocumentViewerScreen(
                                 bitmap = pdfBitmap,
                                 scale = pdfScale,
                                 offset = pdfOffset,
+                                colorFilterMode = effectivePdfColorMode,
                                 onTransform = { s, o ->
                                     pdfScale = (pdfScale * s).coerceIn(1f, 4f)
                                     pdfOffset += o
+                                },
+                                onSingleTap = {
+                                    isImmersiveFullscreen = !isImmersiveFullscreen
                                 },
                                 onSwipeNext = {
                                     if (pdfCurrentPage < pdfTotalPages - 1) {
@@ -827,29 +1297,55 @@ fun MultiFormatDocumentViewerScreen(
                     "epub" -> {
                         val currentChapter = epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)
                         if (currentChapter != null) {
+                            val paragraphs = remember(currentChapter.textContent) {
+                                currentChapter.textContent.split("\n\n").filter { it.isNotBlank() }
+                            }
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .verticalScroll(epubScrollState)
+                                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text(
-                                    text = currentChapter.title,
-                                    fontSize = (fontSizeSp + 6).sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = readerTheme.text,
-                                    textAlign = TextAlign.Start
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = currentChapter.title,
+                                        fontSize = (fontSizeSp + 5).sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = readerTheme.text,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = "انقر على أي فقرة للتظليل أو الإرسال للمحرر ✍️",
+                                        fontSize = 9.sp,
+                                        color = theme.primaryColor
+                                    )
+                                }
                                 HorizontalDivider(color = readerTheme.text.copy(alpha = 0.1f))
-                                Text(
-                                    text = currentChapter.textContent,
-                                    fontSize = fontSizeSp.sp,
-                                    lineHeight = (fontSizeSp * lineSpacing).sp,
-                                    fontWeight = fontWeight,
-                                    color = readerTheme.text,
-                                    textAlign = TextAlign.Start
-                                )
+
+                                paragraphs.forEach { paraText ->
+                                    val matchingHighlight = highlights.firstOrNull {
+                                        it.snippetText.trim() == paraText.trim()
+                                    }
+                                    InteractiveParagraphView(
+                                        text = paraText,
+                                        searchQuery = searchQuery,
+                                        highlightItem = matchingHighlight,
+                                        fontSizeSp = fontSizeSp,
+                                        lineSpacing = lineSpacing,
+                                        fontWeight = fontWeight,
+                                        textColor = readerTheme.text,
+                                        onClick = {
+                                            activeQuoteDraft = paraText
+                                            activeQuoteNote = matchingHighlight?.note ?: ""
+                                            activeQuoteColorHex = matchingHighlight?.colorHex ?: "#FDE047"
+                                        }
+                                    )
+                                }
                             }
                         } else {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -858,7 +1354,6 @@ fun MultiFormatDocumentViewerScreen(
                         }
                     }
                     "pptx", "ppt" -> {
-                        // PowerPoint Slide Viewer
                         val pres = pptxPresentation
                         val slide = pres?.slides?.getOrNull(pptxCurrentSlideIndex)
                         if (slide != null) {
@@ -866,19 +1361,23 @@ fun MultiFormatDocumentViewerScreen(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .verticalScroll(rememberScrollState())
-                                    .padding(18.dp),
-                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Slide Card Frame
                                 Card(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            activeQuoteDraft = "${slide.title}\n${slide.textContent}"
+                                            activeQuoteNote = ""
+                                        },
                                     shape = RoundedCornerShape(16.dp),
                                     colors = CardDefaults.cardColors(containerColor = readerTheme.surface),
                                     elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(20.dp),
-                                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                                        modifier = Modifier.padding(18.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -899,9 +1398,9 @@ fun MultiFormatDocumentViewerScreen(
                                             }
 
                                             Text(
-                                                text = "${pptxCurrentSlideIndex + 1} / ${pres.slides.size}",
-                                                fontSize = 11.sp,
-                                                color = Color.Gray
+                                                text = "انقر على الشريحة لاقتباسها للمحرر ✍️",
+                                                fontSize = 9.sp,
+                                                color = theme.primaryColor
                                             )
                                         }
 
@@ -915,7 +1414,7 @@ fun MultiFormatDocumentViewerScreen(
                                         HorizontalDivider(color = readerTheme.text.copy(alpha = 0.1f))
 
                                         Text(
-                                            text = slide.textContent,
+                                            text = buildHighlightedAnnotatedString(slide.textContent, searchQuery),
                                             fontSize = fontSizeSp.sp,
                                             lineHeight = (fontSizeSp * lineSpacing).sp,
                                             fontWeight = fontWeight,
@@ -1043,74 +1542,64 @@ fun MultiFormatDocumentViewerScreen(
                         }
                     }
                     else -> {
-                        // DOCX / TXT / HTML / RTF Text View
+                        // DOCX / TXT / HTML / RTF Text View with Interactive Paragraphs
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(textScrollState)
-                                .padding(horizontal = 20.dp, vertical = 14.dp)
+                                .padding(horizontal = 18.dp, vertical = 12.dp)
                         ) {
-                            if (extension == "docx") {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (extension == "docx") {
                                     FilterChip(
                                         selected = isDocxEditingMode,
                                         onClick = { isDocxEditingMode = !isDocxEditingMode },
                                         label = {
                                             Text(
-                                                if (isDocxEditingMode) "وضع تعديل فقرات Word مفعّل ✏️" else "تفعيل تعديل فقرات Word",
-                                                fontSize = 11.sp
+                                                if (isDocxEditingMode) "وضع تعديل فقرات Word مفعّل ✏️" else "تعديل فقرات Word",
+                                                fontSize = 10.sp
                                             )
                                         }
                                     )
-
-                                    if (isDocxEditingMode) {
-                                        Button(
-                                            onClick = {
-                                                coroutineScope.launch {
-                                                    val outFile = withContext(Dispatchers.IO) {
-                                                        DocmoDocumentBridge.exportEditedDocxParagraphs(
-                                                            context = context,
-                                                            baseName = fileName,
-                                                            paragraphs = editableDocxParagraphs
-                                                        )
-                                                    }
-                                                    textDocumentContent = editableDocxParagraphs.joinToString("\n\n")
-                                                    pendingFileToSave = outFile
-                                                    saveToDeviceLauncher.launch(outFile.name)
-                                                }
-                                            },
-                                            shape = RoundedCornerShape(10.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                        ) {
-                                            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(15.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("حفظ نسخة Word جديدة", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (searchQuery.isNotBlank()) {
-                                val matchCount = countMatches(textDocumentContent, searchQuery)
-                                Surface(
-                                    color = theme.primaryColor.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                                ) {
+                                } else {
                                     Text(
-                                        text = "تم العثور على $matchCount نتيجة مطابقة لـ \"$searchQuery\"",
-                                        fontSize = 11.sp,
+                                        text = "💡 انقر على أي فقرة للتظليل الملون أو إرسالها كاقتباس لشاشة الكتابة",
+                                        fontSize = 9.sp,
                                         color = theme.primaryColor,
-                                        modifier = Modifier.padding(8.dp),
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Medium
                                     )
+                                }
+
+                                if (extension == "docx" && isDocxEditingMode) {
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                val outFile = withContext(Dispatchers.IO) {
+                                                    DocmoDocumentBridge.exportEditedDocxParagraphs(
+                                                        context = context,
+                                                        baseName = fileName,
+                                                        paragraphs = editableDocxParagraphs
+                                                    )
+                                                }
+                                                textDocumentContent = editableDocxParagraphs.joinToString("\n\n")
+                                                pendingFileToSave = outFile
+                                                saveToDeviceLauncher.launch(outFile.name)
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("حفظ نسخة Word", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
 
@@ -1132,39 +1621,212 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             } else if (docxParagraphs.isNotEmpty()) {
                                 docxParagraphs.forEach { para ->
+                                    val matchingHighlight = highlights.firstOrNull {
+                                        it.snippetText.trim() == para.text.trim()
+                                    }
                                     if (para.isHeading) {
                                         Text(
-                                            text = para.text,
+                                            text = buildHighlightedAnnotatedString(para.text, searchQuery),
                                             fontSize = (fontSizeSp + 4).sp,
                                             fontWeight = FontWeight.Bold,
                                             color = theme.primaryColor,
-                                            modifier = Modifier.padding(vertical = 8.dp)
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    activeQuoteDraft = para.text
+                                                    activeQuoteNote = matchingHighlight?.note ?: ""
+                                                }
+                                                .padding(vertical = 6.dp)
                                         )
                                     } else {
-                                        Text(
+                                        InteractiveParagraphView(
                                             text = para.text,
-                                            fontSize = fontSizeSp.sp,
-                                            lineHeight = (fontSizeSp * lineSpacing).sp,
+                                            searchQuery = searchQuery,
+                                            highlightItem = matchingHighlight,
+                                            fontSizeSp = fontSizeSp,
+                                            lineSpacing = lineSpacing,
                                             fontWeight = fontWeight,
-                                            color = readerTheme.text,
-                                            modifier = Modifier.padding(vertical = 4.dp)
+                                            textColor = readerTheme.text,
+                                            onClick = {
+                                                activeQuoteDraft = para.text
+                                                activeQuoteNote = matchingHighlight?.note ?: ""
+                                                activeQuoteColorHex = matchingHighlight?.colorHex ?: "#FDE047"
+                                            }
                                         )
                                     }
                                 }
                             } else {
-                                Text(
-                                    text = textDocumentContent,
-                                    fontSize = fontSizeSp.sp,
-                                    lineHeight = (fontSizeSp * lineSpacing).sp,
-                                    fontWeight = fontWeight,
-                                    color = readerTheme.text
-                                )
+                                val blocks = remember(textDocumentContent) {
+                                    textDocumentContent.split("\n\n").filter { it.isNotBlank() }
+                                }
+                                blocks.forEach { blockText ->
+                                    val matchingHighlight = highlights.firstOrNull {
+                                        it.snippetText.trim() == blockText.trim()
+                                    }
+                                    InteractiveParagraphView(
+                                        text = blockText,
+                                        searchQuery = searchQuery,
+                                        highlightItem = matchingHighlight,
+                                        fontSizeSp = fontSizeSp,
+                                        lineSpacing = lineSpacing,
+                                        fontWeight = fontWeight,
+                                        textColor = readerTheme.text,
+                                        onClick = {
+                                            activeQuoteDraft = blockText
+                                            activeQuoteNote = matchingHighlight?.note ?: ""
+                                            activeQuoteColorHex = matchingHighlight?.colorHex ?: "#FDE047"
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
+
+            // Floating Exit Fullscreen Pill when Immersive Fullscreen is active
+            if (isImmersiveFullscreen) {
+                Surface(
+                    onClick = { isImmersiveFullscreen = false },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.65f),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.FullscreenExit, contentDescription = "إنهاء ملء الشاشة", tint = Color.White, modifier = Modifier.size(14.dp))
+                        Text(currentPositionLabel, fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
+    }
+
+    // Upgrade 1 Dialog: Interactive Quote, Highlight Color, Margin Note & Send to Editor
+    if (activeQuoteDraft != null) {
+        val colorOptions = listOf(
+            "#FDE047" to "أصفر",
+            "#86EFAC" to "أخضر",
+            "#93C5FD" to "أزرق",
+            "#F9A8D4" to "وردي",
+            "#FDBA74" to "برتقالي"
+        )
+        AlertDialog(
+            onDismissRequest = { activeQuoteDraft = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.FormatQuote, contentDescription = null, tint = theme.primaryColor)
+                    Text("تظليل واقتباس وإرسال للمحرر ✍️", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = activeQuoteDraft ?: "",
+                        onValueChange = { activeQuoteDraft = it },
+                        label = { Text("النص المقتبس أو المظلل", fontSize = 11.sp) },
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Text("لون التظليل:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        colorOptions.forEach { (hex, label) ->
+                            val parsedColor = parseHexColorSafe(hex)
+                            val isSelected = activeQuoteColorHex == hex
+                            Surface(
+                                onClick = { activeQuoteColorHex = hex },
+                                shape = RoundedCornerShape(8.dp),
+                                color = parsedColor,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    if (isSelected) 2.dp else 0.5.dp,
+                                    if (isSelected) Color.Black else Color.Gray
+                                ),
+                                modifier = Modifier.weight(1f).height(30.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(label, fontSize = 9.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, color = Color.Black)
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = activeQuoteNote,
+                        onValueChange = { activeQuoteNote = it },
+                        label = { Text("ملاحظة هامشية أو تعليق شخصي (اختياري)", fontSize = 11.sp) },
+                        placeholder = { Text("اكتب فكرتك أو تعليقك حول هذه الفقرة...", fontSize = 11.sp) },
+                        maxLines = 2,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    // Direct Send to Editor Button
+                    Button(
+                        onClick = {
+                            val quoteText = activeQuoteDraft ?: ""
+                            if (quoteText.isNotBlank()) {
+                                viewModel.insertQuoteIntoActiveChapter(
+                                    quoteText = quoteText,
+                                    sourceFileName = fileName,
+                                    positionLabel = currentPositionLabel,
+                                    note = activeQuoteNote
+                                )
+                                Toast.makeText(context, "تم إرسال الاقتباس مباشرة إلى الفصل الحالي في شاشة الكتابة ✍️", Toast.LENGTH_LONG).show()
+                                activeQuoteDraft = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("إرسال مباشر إلى شاشة الكتابة (المحرر) ✍️", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val snippet = activeQuoteDraft?.trim() ?: ""
+                        if (snippet.isNotBlank()) {
+                            val newHl = DocumentHighlightItem(
+                                uriString = uriString,
+                                snippetText = snippet,
+                                note = activeQuoteNote.trim(),
+                                colorHex = activeQuoteColorHex,
+                                positionIndex = currentPositionIndex,
+                                positionLabel = currentPositionLabel
+                            )
+                            val updated = highlights.filter { it.snippetText.trim() != snippet } + newHl
+                            highlights = updated
+                            MultiFormatDocumentEngine.saveDocumentHighlights(context, uriString, updated)
+                            Toast.makeText(context, "تم حفظ التظليل والملاحظة 🖍️", Toast.LENGTH_SHORT).show()
+                        }
+                        activeQuoteDraft = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor)
+                ) {
+                    Text("حفظ التظليل 🖍️", fontSize = 12.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeQuoteDraft = null }) {
+                    Text("إلغاء")
+                }
+            }
+        )
     }
 
     // Settings Bottom Sheet
@@ -1176,8 +1838,9 @@ fun MultiFormatDocumentViewerScreen(
         )
     }
 
-    // Bookmarks Drawer Bottom Sheet
+    // Upgraded Notebook Sheet: Highlights, Margin Notes, Bookmarks & Export Summary
     if (showBookmarksSheet) {
+        var selectedTab by remember { mutableIntStateOf(0) } // 0 = Highlights & Quotes, 1 = Bookmarks
         ModalBottomSheet(
             onDismissRequest = { showBookmarksSheet = false },
             containerColor = readerTheme.surface
@@ -1185,53 +1848,206 @@ fun MultiFormatDocumentViewerScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("العلامات المرجعية المحفوظة 🔖", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = readerTheme.text)
-                    Text("${bookmarks.size} إشارة", fontSize = 11.sp, color = Color.Gray)
+                    Text("دفتر التظليلات والملاحظات والمرجعيات 📑", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = readerTheme.text)
+                    Text("${highlights.size + bookmarks.size} عنصر", fontSize = 11.sp, color = Color.Gray)
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        label = { Text("🖍️ التظليلات والاقتباسات (${highlights.size})", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        label = { Text("🔖 العلامات المرجعية (${bookmarks.size})", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
                 HorizontalDivider(color = readerTheme.text.copy(alpha = 0.1f))
 
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp)) {
-                    items(bookmarks) { bm ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    when (extension) {
-                                        "pdf" -> pdfCurrentPage = bm.positionIndex
-                                        "epub" -> epubCurrentChapterIndex = bm.positionIndex
-                                        "pptx", "ppt" -> pptxCurrentSlideIndex = bm.positionIndex
-                                        else -> {
-                                            coroutineScope.launch {
-                                                textScrollState.scrollTo(bm.positionIndex)
+                if (selectedTab == 0) {
+                    if (highlights.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            Text("لا توجد تظليلات أو اقتباسات محفوظة بعد. انقر على أي فقرة أو زر ❝ في الأعلى لإضافة اقتباس.", fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(highlights, key = { it.id }) { hl ->
+                                val bgColor = parseHexColorSafe(hl.colorHex).copy(alpha = 0.35f)
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = bgColor,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, parseHexColorSafe(hl.colorHex)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            when (extension) {
+                                                "pdf" -> pdfCurrentPage = hl.positionIndex
+                                                "epub" -> epubCurrentChapterIndex = hl.positionIndex
+                                                "pptx", "ppt" -> pptxCurrentSlideIndex = hl.positionIndex
+                                                else -> coroutineScope.launch { textScrollState.scrollTo(hl.positionIndex) }
+                                            }
+                                            showBookmarksSheet = false
+                                        }
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(hl.positionLabel, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                // Send single highlight to editor
+                                                IconButton(
+                                                    onClick = {
+                                                        viewModel.insertQuoteIntoActiveChapter(
+                                                            quoteText = hl.snippetText,
+                                                            sourceFileName = fileName,
+                                                            positionLabel = hl.positionLabel,
+                                                            note = hl.note
+                                                        )
+                                                        Toast.makeText(context, "تم إرسال الاقتباس لشاشة الكتابة ✍️", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier.size(26.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Send, contentDescription = "إرسال للمحرر", tint = Color(0xFF059669), modifier = Modifier.size(15.dp))
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        val updated = highlights.filter { it.id != hl.id }
+                                                        highlights = updated
+                                                        MultiFormatDocumentEngine.saveDocumentHighlights(context, uriString, updated)
+                                                    },
+                                                    modifier = Modifier.size(26.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color.Gray, modifier = Modifier.size(15.dp))
+                                                }
                                             }
                                         }
+                                        Text("«${hl.snippetText}»", fontSize = 12.sp, color = readerTheme.text, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                        if (hl.note.isNotBlank()) {
+                                            Text("💡 ملاحظة: ${hl.note}", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF92400E))
+                                        }
                                     }
-                                    showBookmarksSheet = false
                                 }
-                                .padding(vertical = 10.dp, horizontal = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            }
+                        }
+                    }
+                } else {
+                    if (bookmarks.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            Text("لا توجد علامات مرجعية محفوظة بعد.", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                            items(bookmarks, key = { it.id }) { bm ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            when (extension) {
+                                                "pdf" -> pdfCurrentPage = bm.positionIndex
+                                                "epub" -> epubCurrentChapterIndex = bm.positionIndex
+                                                "pptx", "ppt" -> pptxCurrentSlideIndex = bm.positionIndex
+                                                else -> coroutineScope.launch { textScrollState.scrollTo(bm.positionIndex) }
+                                            }
+                                            showBookmarksSheet = false
+                                        }
+                                        .padding(vertical = 8.dp, horizontal = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
+                                        Text(bm.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = readerTheme.text)
+                                    }
+                                    IconButton(onClick = {
+                                        val updated = bookmarks.filter { it.id != bm.id }
+                                        bookmarks = updated
+                                        MultiFormatDocumentEngine.saveDocumentBookmarks(context, uriString, updated)
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Export / Insert All Annotations Buttons
+                if (highlights.isNotEmpty() || bookmarks.isNotEmpty()) {
+                    HorizontalDivider(color = readerTheme.text.copy(alpha = 0.1f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val summary = MultiFormatDocumentEngine.formatAnnotationsSummary(
+                                    fileName = fileName,
+                                    bookmarks = bookmarks,
+                                    highlights = highlights
+                                )
+                                viewModel.insertAnnotationsAsNewChapter(
+                                    chapterTitle = "ملاحظات واقتباسات: $fileName",
+                                    summaryText = summary
+                                )
+                                showBookmarksSheet = false
+                                Toast.makeText(context, "تم إدراج جميع الملاحظات والاقتباسات كفصل جديد في مشروعك 📚", Toast.LENGTH_LONG).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Default.Bookmark, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
-                                Text(bm.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = readerTheme.text)
-                            }
-                            IconButton(onClick = {
-                                val updated = bookmarks.filter { it.id != bm.id }
-                                bookmarks = updated
-                                MultiFormatDocumentEngine.saveDocumentBookmarks(context, uriString, updated)
-                            }) {
-                                Icon(Icons.Default.Delete, contentDescription = "حذف", tint = Color.Gray, modifier = Modifier.size(16.dp))
-                            }
+                            Icon(Icons.Default.LibraryAdd, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("إدراج كفصل بالمشروع 📚", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val summary = MultiFormatDocumentEngine.formatAnnotationsSummary(
+                                    fileName = fileName,
+                                    bookmarks = bookmarks,
+                                    highlights = highlights
+                                )
+                                val outDir = File(context.cacheDir, "conversions").apply { mkdirs() }
+                                val outFile = File(outDir, "ملخص_ملاحظات_${fileName.substringBeforeLast(".")}.txt")
+                                outFile.writeText(summary, Charsets.UTF_8)
+                                pendingFileToSave = outFile
+                                showBookmarksSheet = false
+                                saveToDeviceLauncher.launch(outFile.name)
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.SaveAlt, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("تصدير الملخص كملف 💾", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1239,49 +2055,178 @@ fun MultiFormatDocumentViewerScreen(
         }
     }
 
-    // EPUB Chapters Index Bottom Sheet
-    if (showEpubChaptersSheet && epubBook != null) {
+    // Auto Table of Contents / Outline Bottom Sheet (Works for EPUB, DOCX, TXT, HTML, PPTX, PDF)
+    if (showOutlineSheet) {
         ModalBottomSheet(
-            onDismissRequest = { showEpubChaptersSheet = false },
+            onDismissRequest = { showOutlineSheet = false },
             containerColor = readerTheme.surface
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text("فهرس فصول الكتاب 📚", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = readerTheme.text)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("فهرس المحتويات والعناوين الذكي 📑", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = readerTheme.text)
+                    Text("${documentOutline.size} قسم", fontSize = 11.sp, color = Color.Gray)
+                }
                 HorizontalDivider(color = readerTheme.text.copy(alpha = 0.1f))
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp)) {
-                    itemsIndexed(epubBook!!.chapters) { idx, ch ->
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    items(documentOutline) { item ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
-                                    epubCurrentChapterIndex = idx
-                                    showEpubChaptersSheet = false
+                                    when (extension) {
+                                        "epub" -> epubCurrentChapterIndex = item.positionIndex
+                                        "pptx", "ppt" -> pptxCurrentSlideIndex = item.positionIndex
+                                        "pdf" -> pdfCurrentPage = item.positionIndex
+                                        "docx" -> {
+                                            val ratio = item.positionIndex.toFloat() / docxParagraphs.size.coerceAtLeast(1)
+                                            coroutineScope.launch {
+                                                textScrollState.animateScrollTo((ratio * textScrollState.maxValue).toInt())
+                                            }
+                                        }
+                                        else -> {
+                                            val ratio = item.positionIndex.toFloat() / textDocumentContent.length.coerceAtLeast(1)
+                                            coroutineScope.launch {
+                                                textScrollState.animateScrollTo((ratio * textScrollState.maxValue).toInt())
+                                            }
+                                        }
+                                    }
+                                    showOutlineSheet = false
                                     saveCurrentProgress()
                                 }
-                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                                .padding(
+                                    start = if (item.level > 1) 18.dp else 8.dp,
+                                    end = 8.dp,
+                                    top = 9.dp,
+                                    bottom = 9.dp
+                                ),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = ch.title,
-                                fontSize = 13.sp,
-                                color = if (idx == epubCurrentChapterIndex) theme.primaryColor else readerTheme.text,
-                                fontWeight = if (idx == epubCurrentChapterIndex) FontWeight.Bold else FontWeight.Normal
-                            )
-                            if (idx == epubCurrentChapterIndex) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(18.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.title,
+                                    fontSize = 13.sp,
+                                    color = readerTheme.text,
+                                    fontWeight = if (item.level == 1) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (item.subtitle.isNotBlank()) {
+                                    Text(item.subtitle, fontSize = 10.sp, color = Color.Gray)
+                                }
                             }
+                            Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
             }
         }
+    }
+
+    // Upgrade 5 Dialog: Extract Specific PDF Page Range into Standalone PDF
+    if (showExtractPdfRangeDialog && extension == "pdf" && pdfTotalPages > 0) {
+        var fromPageInput by remember { mutableStateOf((pdfCurrentPage + 1).toString()) }
+        var toPageInput by remember { mutableStateOf(minOf(pdfCurrentPage + 5, pdfTotalPages).toString()) }
+        var isExtractingPages by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isExtractingPages) showExtractPdfRangeDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.ContentCut, contentDescription = null, tint = theme.primaryColor)
+                    Text("استخراج نطاق صفحات PDF كملف مستقل ✂️", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "حدد أرقام الصفحات التي تريد فصلها من هذا المستند (الإجمالي: $pdfTotalPages صفحة):",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = fromPageInput,
+                            onValueChange = { fromPageInput = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("من صفحة", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = toPageInput,
+                            onValueChange = { toPageInput = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("إلى صفحة", fontSize = 11.sp) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (isExtractingPages) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text("جارٍ استخراج الصفحات وبناء ملف PDF جديد...", fontSize = 11.sp, color = theme.primaryColor)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val startP = (fromPageInput.toIntOrNull() ?: 1).coerceIn(1, pdfTotalPages)
+                        val endP = (toPageInput.toIntOrNull() ?: startP).coerceIn(startP, pdfTotalPages)
+                        isExtractingPages = true
+                        coroutineScope.launch {
+                            val extractedFile = withContext(Dispatchers.IO) {
+                                MultiFormatDocumentEngine.extractPdfPageRange(
+                                    context = context,
+                                    sourceUri = uri,
+                                    sourceFileName = fileName,
+                                    startPageOneIndexed = startP,
+                                    endPageOneIndexed = endP
+                                )
+                            }
+                            isExtractingPages = false
+                            showExtractPdfRangeDialog = false
+                            if (extractedFile != null) {
+                                pendingFileToSave = extractedFile
+                                Toast.makeText(context, "تم استخراج الصفحات ($startP - $endP) بنجاح! اختر مكان الحفظ", Toast.LENGTH_LONG).show()
+                                saveToDeviceLauncher.launch(extractedFile.name)
+                            } else {
+                                Toast.makeText(context, "تعذر استخراج الصفحات المطلوبة", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    enabled = !isExtractingPages,
+                    colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor)
+                ) {
+                    Text("استخراج وحفظ PDF")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showExtractPdfRangeDialog = false },
+                    enabled = !isExtractingPages
+                ) {
+                    Text("إلغاء")
+                }
+            }
+        )
     }
 
     // Converter & Security Studio Dialog (Direct from Viewer)
@@ -1342,20 +2287,209 @@ fun MultiFormatDocumentViewerScreen(
 }
 
 @Composable
+private fun InteractiveParagraphView(
+    text: String,
+    searchQuery: String,
+    highlightItem: DocumentHighlightItem?,
+    fontSizeSp: Float,
+    lineSpacing: Float,
+    fontWeight: FontWeight,
+    textColor: Color,
+    onClick: () -> Unit
+) {
+    val bgHighlightColor = remember(highlightItem?.colorHex) {
+        if (highlightItem != null) {
+            parseHexColorSafe(highlightItem.colorHex).copy(alpha = 0.35f)
+        } else {
+            Color.Transparent
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgHighlightColor)
+            .clickable { onClick() }
+            .padding(
+                horizontal = if (highlightItem != null) 8.dp else 2.dp,
+                vertical = 4.dp
+            )
+    ) {
+        Text(
+            text = buildHighlightedAnnotatedString(text, searchQuery),
+            fontSize = fontSizeSp.sp,
+            lineHeight = (fontSizeSp * lineSpacing).sp,
+            fontWeight = fontWeight,
+            color = textColor
+        )
+        if (highlightItem != null && highlightItem.note.isNotBlank()) {
+            Spacer(modifier = Modifier.height(3.dp))
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = Color(0xFFFEF3C7)
+            ) {
+                Text(
+                    text = "💡 ${highlightItem.note}",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF92400E),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun buildHighlightedAnnotatedString(text: String, query: String): AnnotatedString {
+    if (query.isBlank()) return AnnotatedString(text)
+    return buildAnnotatedString {
+        val regex = Regex(Regex.escape(query.trim()), RegexOption.IGNORE_CASE)
+        var lastIndex = 0
+        regex.findAll(text).forEach { matchResult ->
+            val start = matchResult.range.first
+            val end = matchResult.range.last + 1
+            if (start > lastIndex) {
+                append(text.substring(lastIndex, start))
+            }
+            withStyle(
+                style = SpanStyle(
+                    background = Color(0xFFFDE047),
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold
+                )
+            ) {
+                append(text.substring(start, end))
+            }
+            lastIndex = end
+        }
+        if (lastIndex < text.length) {
+            append(text.substring(lastIndex))
+        }
+    }
+}
+
+private fun parseHexColorSafe(hex: String): Color {
+    return try {
+        Color(android.graphics.Color.parseColor(hex))
+    } catch (_: Exception) {
+        Color(0xFFFDE047)
+    }
+}
+
+@Composable
+private fun PdfPageThumbnailCard(
+    uri: Uri,
+    pageIndex: Int,
+    isSelected: Boolean,
+    primaryColor: Color,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    var thumbBitmap by remember(uri, pageIndex) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(uri, pageIndex) {
+        thumbBitmap = withContext(Dispatchers.IO) {
+            MultiFormatDocumentEngine.renderPdfPage(context, uri, pageIndex, scaleFactor = 0.28f)
+        }
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(6.dp),
+        color = if (isSelected) primaryColor.copy(alpha = 0.15f) else Color.White,
+        border = androidx.compose.foundation.BorderStroke(
+            if (isSelected) 2.dp else 0.5.dp,
+            if (isSelected) primaryColor else Color.LightGray
+        ),
+        modifier = Modifier.width(48.dp).height(64.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (thumbBitmap != null) {
+                Image(
+                    bitmap = thumbBitmap!!.asImageBitmap(),
+                    contentDescription = "مصغرة صفحة ${pageIndex + 1}",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            Surface(
+                color = if (isSelected) primaryColor else Color.Black.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(topStart = 4.dp),
+                modifier = Modifier.align(Alignment.BottomEnd)
+            ) {
+                Text(
+                    text = "${pageIndex + 1}",
+                    fontSize = 8.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun PdfPageView(
     bitmap: Bitmap?,
     scale: Float,
     offset: androidx.compose.ui.geometry.Offset,
+    colorFilterMode: String = "NORMAL",
     onTransform: (Float, androidx.compose.ui.geometry.Offset) -> Unit,
+    onSingleTap: () -> Unit = {},
     onSwipeNext: () -> Unit = {},
     onSwipePrevious: () -> Unit = {}
 ) {
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
 
+    val pdfColorFilter = remember(colorFilterMode) {
+        when (colorFilterMode) {
+            "NIGHT" -> {
+                // Smart Dark Inversion Matrix for comfortable night PDF reading
+                ColorFilter.colorMatrix(
+                    ColorMatrix(
+                        floatArrayOf(
+                            -0.88f, 0f, 0f, 0f, 240f,
+                            0f, -0.88f, 0f, 0f, 242f,
+                            0f, 0f, -0.85f, 0f, 248f,
+                            0f, 0f, 0f, 1f, 0f
+                        )
+                    )
+                )
+            }
+            "SEPIA" -> {
+                // Warm Vintage Sepia Paper Matrix
+                ColorFilter.colorMatrix(
+                    ColorMatrix(
+                        floatArrayOf(
+                            0.96f, 0.04f, 0f, 0f, 0f,
+                            0.02f, 0.92f, 0.02f, 0f, 0f,
+                            0f, 0.05f, 0.78f, 0f, 0f,
+                            0f, 0f, 0f, 1f, 0f
+                        )
+                    )
+                )
+            }
+            else -> null
+        }
+    }
+
+    val containerBg = when (colorFilterMode) {
+        "NIGHT" -> Color(0xFF0F172A)
+        "SEPIA" -> Color(0xFFF5E6D3)
+        else -> Color(0xFFE2E8F0)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFE2E8F0))
+            .background(containerBg)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onSingleTap() }
+                )
+            }
             .pointerInput(scale) {
                 if (scale <= 1.15f) {
                     detectVerticalDragGestures(
@@ -1365,10 +2499,8 @@ private fun PdfPageView(
                         },
                         onDragEnd = {
                             if (dragAccumulator < -60f) {
-                                // سحب من أسفل لأعلى -> الصفحة التالية
                                 onSwipeNext()
                             } else if (dragAccumulator > 60f) {
-                                // سحب من أعلى لأسفل -> الصفحة السابقة
                                 onSwipePrevious()
                             }
                             dragAccumulator = 0f
@@ -1387,6 +2519,7 @@ private fun PdfPageView(
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "صفحة PDF",
+                colorFilter = pdfColorFilter,
                 modifier = Modifier
                     .fillMaxSize(0.99f)
                     .graphicsLayer(
@@ -1530,7 +2663,7 @@ private fun SpreadsheetGridView(
                         data.headers.indices.forEach { colIdx ->
                             val cellValue = row.getOrNull(colIdx) ?: ""
                             Text(
-                                text = cellValue,
+                                text = buildHighlightedAnnotatedString(cellValue, searchQuery),
                                 fontSize = 11.sp,
                                 color = readerTheme.text,
                                 modifier = Modifier
@@ -1584,10 +2717,4 @@ private fun SpreadsheetGridView(
             }
         )
     }
-}
-
-private fun countMatches(text: String, query: String): Int {
-    if (query.isBlank()) return 0
-    val regex = Regex(Regex.escape(query), RegexOption.IGNORE_CASE)
-    return regex.findAll(text).count()
 }

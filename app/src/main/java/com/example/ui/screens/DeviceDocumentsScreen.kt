@@ -34,6 +34,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -67,9 +70,11 @@ fun DeviceDocumentsScreen(
     var selectedCategory by remember { mutableStateOf(DocumentCategory.ALL) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Folder and sorting states
-    var customFolders by remember { mutableStateOf(listOf("الكل", "الرئيسي", "المحولة", "المفضلة", "مسودات ومراجع")) }
+    // Folder, tags and sorting states
+    var customFolders by remember { mutableStateOf(listOf("الكل", "المفضلة", "الرئيسي", "المحولة", "مسودات ومراجع")) }
     var selectedFolder by remember { mutableStateOf("الكل") }
+    var selectedTagFilter by remember { mutableStateOf<String?>(null) }
+    val presetTags = remember { listOf("مرجع تاريخي", "مسودة", "للترجمة", "هام", "اقتباسات") }
     var sortBy by remember { mutableStateOf("DATE_DESC") } // DATE_DESC, DATE_ASC, NAME_ASC, SIZE_DESC, TYPE
     var showSortBottomSheet by remember { mutableStateOf(false) }
     var isGridView by remember { mutableStateOf(false) }
@@ -77,6 +82,7 @@ fun DeviceDocumentsScreen(
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var newFolderNameInput by remember { mutableStateOf("") }
     var showTopMoreMenu by remember { mutableStateOf(false) }
+    var showRecentReadingStrip by remember { mutableStateOf(true) }
 
     // Converter Studio Dialog
     var showConverterDialog by remember { mutableStateOf(false) }
@@ -86,6 +92,38 @@ fun DeviceDocumentsScreen(
     val allProgressList by viewModel.allDocumentProgress.collectAsState(initial = emptyList())
     val progressMap = remember(allProgressList) {
         allProgressList.associateBy { it.fileUri }
+    }
+    val recentReadList = remember(allProgressList) {
+        allProgressList
+            .filter { it.totalProgressPercentage > 0f }
+            .sortedByDescending { it.lastReadTimestamp }
+            .take(8)
+    }
+
+    fun toggleDocFavorite(doc: ScannedDocumentItem) {
+        val nowFav = MultiFormatDocumentEngine.toggleFavoriteDocument(context, doc.uriString)
+        scannedDocuments = scannedDocuments.map {
+            if (it.uriString == doc.uriString) it.copy(isFavorite = nowFav) else it
+        }
+        activeDocForBottomSheet = activeDocForBottomSheet?.let {
+            if (it.uriString == doc.uriString) it.copy(isFavorite = nowFav) else it
+        }
+        Toast.makeText(
+            context,
+            if (nowFav) "تمت الإضافة إلى المفضلة ⭐" else "تمت الإزالة من المفضلة",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    fun updateDocTags(doc: ScannedDocumentItem, newTags: List<String>) {
+        val cleaned = newTags.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        MultiFormatDocumentEngine.saveDocumentTags(context, doc.uriString, cleaned)
+        scannedDocuments = scannedDocuments.map {
+            if (it.uriString == doc.uriString) it.copy(tags = cleaned) else it
+        }
+        activeDocForBottomSheet = activeDocForBottomSheet?.let {
+            if (it.uriString == doc.uriString) it.copy(tags = cleaned) else it
+        }
     }
 
     // Storage Access Framework (SAF) File Picker Launcher
@@ -155,12 +193,20 @@ fun DeviceDocumentsScreen(
     }
 
     // Filter and Sort Pipeline
-    val filteredList = remember(scannedDocuments, selectedCategory, selectedFolder, searchQuery, sortBy) {
+    val filteredList = remember(scannedDocuments, selectedCategory, selectedFolder, selectedTagFilter, searchQuery, sortBy) {
         val filtered = scannedDocuments.filter { doc ->
             val matchCat = selectedCategory == DocumentCategory.ALL || doc.category == selectedCategory
-            val matchFolder = selectedFolder == "الكل" || doc.folderName == selectedFolder
-            val matchQuery = searchQuery.isBlank() || doc.name.contains(searchQuery, ignoreCase = true) || doc.extension.contains(searchQuery, ignoreCase = true)
-            matchCat && matchFolder && matchQuery
+            val matchFolder = when (selectedFolder) {
+                "الكل" -> true
+                "المفضلة" -> doc.isFavorite || doc.folderName == "المفضلة"
+                else -> doc.folderName == selectedFolder
+            }
+            val matchTag = selectedTagFilter == null || doc.tags.contains(selectedTagFilter)
+            val matchQuery = searchQuery.isBlank() ||
+                doc.name.contains(searchQuery, ignoreCase = true) ||
+                doc.extension.contains(searchQuery, ignoreCase = true) ||
+                doc.tags.any { it.contains(searchQuery, ignoreCase = true) }
+            matchCat && matchFolder && matchTag && matchQuery
         }
 
         when (sortBy) {
@@ -168,15 +214,24 @@ fun DeviceDocumentsScreen(
             "NAME_ASC" -> filtered.sortedBy { it.name.lowercase() }
             "SIZE_DESC" -> filtered.sortedByDescending { it.sizeBytes }
             "TYPE" -> filtered.sortedBy { it.extension }
-            else -> filtered.sortedByDescending { it.lastModified } // DATE_DESC
+            else -> filtered.sortedWith(compareByDescending<ScannedDocumentItem> { it.isFavorite }.thenByDescending { it.lastModified })
         }
     }
 
     // Live counts for category chips
-    val categoryCounts = remember(scannedDocuments, selectedFolder, searchQuery) {
+    val categoryCounts = remember(scannedDocuments, selectedFolder, selectedTagFilter, searchQuery) {
         val inFolder = scannedDocuments.filter { doc ->
-            (selectedFolder == "الكل" || doc.folderName == selectedFolder) &&
-            (searchQuery.isBlank() || doc.name.contains(searchQuery, ignoreCase = true) || doc.extension.contains(searchQuery, ignoreCase = true))
+            val matchFolder = when (selectedFolder) {
+                "الكل" -> true
+                "المفضلة" -> doc.isFavorite || doc.folderName == "المفضلة"
+                else -> doc.folderName == selectedFolder
+            }
+            val matchTag = selectedTagFilter == null || doc.tags.contains(selectedTagFilter)
+            val matchQuery = searchQuery.isBlank() ||
+                doc.name.contains(searchQuery, ignoreCase = true) ||
+                doc.extension.contains(searchQuery, ignoreCase = true) ||
+                doc.tags.any { it.contains(searchQuery, ignoreCase = true) }
+            matchFolder && matchTag && matchQuery
         }
         DocumentCategory.values().associateWith { cat ->
             if (cat == DocumentCategory.ALL) inFolder.size
@@ -187,9 +242,17 @@ fun DeviceDocumentsScreen(
     // Live counts for folders
     val folderCounts = remember(scannedDocuments) {
         customFolders.associateWith { folder ->
-            if (folder == "الكل") scannedDocuments.size
-            else scannedDocuments.count { it.folderName == folder }
+            when (folder) {
+                "الكل" -> scannedDocuments.size
+                "المفضلة" -> scannedDocuments.count { it.isFavorite || it.folderName == "المفضلة" }
+                else -> scannedDocuments.count { it.folderName == folder }
+            }
         }
+    }
+
+    // All distinct tags across documents + preset tags
+    val allAvailableTags = remember(scannedDocuments, presetTags) {
+        (presetTags + scannedDocuments.flatMap { it.tags }).distinct()
     }
 
     Scaffold(
@@ -524,6 +587,168 @@ fun DeviceDocumentsScreen(
                 }
             }
 
+            // Compact Tags Filter Row
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                item {
+                    val isAllTags = selectedTagFilter == null
+                    Surface(
+                        onClick = { selectedTagFilter = null },
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isAllTags) Color(0xFF0F766E) else Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isAllTags) Color(0xFF0F766E) else Color(0xFFE2E8F0)),
+                        modifier = Modifier.height(22.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🏷️ كل الوسوم",
+                                fontSize = 9.sp,
+                                color = if (isAllTags) Color.White else Color(0xFF475569),
+                                fontWeight = if (isAllTags) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+                items(allAvailableTags) { tag ->
+                    val isSelected = selectedTagFilter == tag
+                    val tagCount = scannedDocuments.count { it.tags.contains(tag) }
+                    Surface(
+                        onClick = { selectedTagFilter = if (isSelected) null else tag },
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isSelected) Color(0xFF0F766E) else Color(0xFFF0FDFA),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) Color(0xFF0F766E) else Color(0xFF99F6E4)),
+                        modifier = Modifier.height(22.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "#$tag${if (tagCount > 0) " ($tagCount)" else ""}",
+                                fontSize = 9.sp,
+                                color = if (isSelected) Color.White else Color(0xFF0F766E),
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // "قُرئ مؤخراً" (Continue Reading Carousel)
+            if (recentReadList.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.2f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(13.dp))
+                                Text(
+                                    text = "متابعة القراءة (قُرئ مؤخراً) 📖",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = theme.primaryColor
+                                )
+                            }
+                            Text(
+                                text = if (showRecentReadingStrip) "إخفاء ▲" else "عرض (${recentReadList.size}) ▼",
+                                fontSize = 9.sp,
+                                color = Color.Gray,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { showRecentReadingStrip = !showRecentReadingStrip }
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+
+                        AnimatedVisibility(visible = showRecentReadingStrip) {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(recentReadList, key = { it.fileUri }) { prog ->
+                                    val pct = (prog.totalProgressPercentage * 100).toInt().coerceIn(1, 100)
+                                    Surface(
+                                        onClick = { onOpenDocument(prog.fileUri, prog.fileName) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = theme.primaryColor.copy(alpha = 0.06f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.2f)),
+                                        modifier = Modifier.width(155.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = theme.primaryColor
+                                                ) {
+                                                    Text(
+                                                        text = prog.fileType,
+                                                        fontSize = 7.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "صفحة ${prog.lastPageIndex + 1} • $pct%",
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = theme.primaryColor
+                                                )
+                                            }
+                                            Text(
+                                                text = prog.fileName,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1E293B),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            LinearProgressIndicator(
+                                                progress = { prog.totalProgressPercentage },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(3.dp)
+                                                    .clip(RoundedCornerShape(2.dp)),
+                                                color = theme.primaryColor,
+                                                trackColor = Color(0xFFE2E8F0)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Storage scan indicator
             if (isScanning) {
                 Surface(
@@ -594,6 +819,7 @@ fun DeviceDocumentsScreen(
                             progress = savedProg,
                             theme = theme,
                             onClick = { onOpenDocument(doc.uriString, doc.name) },
+                            onToggleFavorite = { toggleDocFavorite(doc) },
                             onOpenOptions = { activeDocForBottomSheet = doc }
                         )
                     }
@@ -611,6 +837,7 @@ fun DeviceDocumentsScreen(
                             progress = savedProg,
                             theme = theme,
                             onClick = { onOpenDocument(doc.uriString, doc.name) },
+                            onToggleFavorite = { toggleDocFavorite(doc) },
                             onOpenOptions = { activeDocForBottomSheet = doc },
                             onQuickConvert = {
                                 targetDocForConverter = doc
@@ -694,6 +921,7 @@ fun DeviceDocumentsScreen(
             progress = savedProg,
             theme = theme,
             availableFolders = customFolders.filter { it != "الكل" },
+            availableTags = allAvailableTags,
             onDismiss = { activeDocForBottomSheet = null },
             onRead = {
                 activeDocForBottomSheet = null
@@ -704,7 +932,10 @@ fun DeviceDocumentsScreen(
                 targetDocForConverter = doc
                 showConverterDialog = true
             },
+            onToggleFavorite = { toggleDocFavorite(doc) },
+            onUpdateTags = { updatedTags -> updateDocTags(doc, updatedTags) },
             onMoveToFolder = { newFolder ->
+                MultiFormatDocumentEngine.saveDocumentFolderOverride(context, doc.uriString, newFolder)
                 scannedDocuments = scannedDocuments.map {
                     if (it.uriString == doc.uriString) it.copy(folderName = newFolder) else it
                 }
@@ -751,10 +982,22 @@ private fun DocumentItemCard(
     progress: DocumentProgressEntity?,
     theme: AppThemeData,
     onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onOpenOptions: () -> Unit,
     onQuickConvert: () -> Unit
 ) {
+    val context = LocalContext.current
     val ext = document.extension.uppercase()
+    var pdfCoverBitmap by remember(document.uriString) { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    LaunchedEffect(document.uriString, ext) {
+        if (ext == "PDF") {
+            pdfCoverBitmap = withContext(Dispatchers.IO) {
+                MultiFormatDocumentEngine.getOrRenderPdfCoverThumbnail(context, document.uriString)
+            }
+        }
+    }
+
     val badgeColor = when (ext) {
         "PDF" -> Color(0xFFEF4444)
         "EPUB" -> Color(0xFF8B5CF6)
@@ -793,25 +1036,48 @@ private fun DocumentItemCard(
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Format Icon Badge
+                // Format Icon Badge or Live PDF Cover Preview
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(badgeColor.copy(alpha = 0.12f)),
+                        .size(width = 46.dp, height = 56.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(badgeColor.copy(alpha = 0.12f))
+                        .border(0.5.dp, badgeColor.copy(alpha = 0.3f), RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(iconVector, contentDescription = null, tint = badgeColor, modifier = Modifier.size(22.dp))
-                        Text(ext, fontSize = 8.sp, fontWeight = FontWeight.Black, color = badgeColor)
+                    if (pdfCoverBitmap != null) {
+                        Image(
+                            bitmap = pdfCoverBitmap!!.asImageBitmap(),
+                            contentDescription = "معاينة غلاف PDF",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Surface(
+                            color = badgeColor.copy(alpha = 0.9f),
+                            shape = RoundedCornerShape(topStart = 4.dp),
+                            modifier = Modifier.align(Alignment.BottomEnd)
+                        ) {
+                            Text(
+                                text = ext,
+                                fontSize = 6.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                            )
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(iconVector, contentDescription = null, tint = badgeColor, modifier = Modifier.size(22.dp))
+                            Text(ext, fontSize = 8.sp, fontWeight = FontWeight.Black, color = badgeColor)
+                        }
                     }
                 }
 
@@ -820,13 +1086,13 @@ private fun DocumentItemCard(
                     Text(
                         text = document.name,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         color = Color(0xFF1E293B),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -845,23 +1111,57 @@ private fun DocumentItemCard(
                             }
                             Text("•", fontSize = 10.sp, color = Color(0xFFCBD5E1))
                         }
-                        Text(sizeFormatted, fontSize = 11.sp, color = Color(0xFF64748B))
+                        Text(sizeFormatted, fontSize = 10.sp, color = Color(0xFF64748B))
                         Text("•", fontSize = 10.sp, color = Color(0xFFCBD5E1))
-                        Text(dateFormatted, fontSize = 11.sp, color = Color(0xFF64748B))
+                        Text(dateFormatted, fontSize = 10.sp, color = Color(0xFF64748B))
+                    }
+
+                    if (document.tags.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items(document.tags) { tag ->
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFFF0FDFA),
+                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF99F6E4))
+                                ) {
+                                    Text(
+                                        text = "#$tag",
+                                        fontSize = 8.sp,
+                                        color = Color(0xFF0F766E),
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
-                // Menu button with 48dp touch target
-                IconButton(
-                    onClick = onOpenOptions,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = "خيارات إضافية",
-                        tint = Color(0xFF64748B),
-                        modifier = Modifier.size(22.dp)
-                    )
+                // Favorite toggle & Menu buttons
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (document.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "المفضلة",
+                            tint = if (document.isFavorite) Color(0xFFF59E0B) else Color(0xFF94A3B8),
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onOpenOptions,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "خيارات إضافية",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
                 }
             }
 
@@ -874,27 +1174,27 @@ private fun DocumentItemCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.BookmarkAdded, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.BookmarkAdded, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(13.dp))
                             val progressText = when (ext) {
                                 "PDF" -> "الصفحة ${progress.lastPageIndex + 1} ($pct%)"
                                 "EPUB" -> "الفصل ${progress.lastPageIndex + 1} ($pct%)"
                                 "PPTX" -> "الشريحة ${progress.lastPageIndex + 1} ($pct%)"
                                 else -> "تقدم القراءة: $pct%"
                             }
-                            Text(progressText, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                            Text(progressText, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
                         }
 
                         LinearProgressIndicator(
                             progress = { progress.totalProgressPercentage },
                             modifier = Modifier
                                 .width(70.dp)
-                                .height(5.dp)
-                                .clip(RoundedCornerShape(3.dp)),
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
                             color = theme.primaryColor,
                             trackColor = Color(0xFFE2E8F0)
                         )
@@ -906,7 +1206,7 @@ private fun DocumentItemCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 2.dp),
+                    .padding(top = 1.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -915,15 +1215,15 @@ private fun DocumentItemCard(
                     onClick = onClick,
                     shape = RoundedCornerShape(8.dp),
                     color = theme.primaryColor.copy(alpha = 0.08f),
-                    modifier = Modifier.height(34.dp)
+                    modifier = Modifier.height(30.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.padding(horizontal = 10.dp)
                     ) {
-                        Icon(Icons.Default.MenuBook, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(14.dp))
-                        Text("قراءة وعرض", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                        Icon(Icons.Default.MenuBook, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(13.dp))
+                        Text("قراءة وعرض", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
                     }
                 }
 
@@ -933,15 +1233,15 @@ private fun DocumentItemCard(
                         onClick = onQuickConvert,
                         shape = RoundedCornerShape(8.dp),
                         color = Color(0xFFEEF2FF),
-                        modifier = Modifier.height(34.dp)
+                        modifier = Modifier.height(30.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.padding(horizontal = 8.dp)
                         ) {
-                            Icon(Icons.Default.Transform, contentDescription = null, tint = Color(0xFF4F46E5), modifier = Modifier.size(14.dp))
-                            Text("تحويل ⚡", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
+                            Icon(Icons.Default.Transform, contentDescription = null, tint = Color(0xFF4F46E5), modifier = Modifier.size(13.dp))
+                            Text("تحويل ⚡", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
                         }
                     }
 
@@ -950,15 +1250,15 @@ private fun DocumentItemCard(
                         onClick = onOpenOptions,
                         shape = RoundedCornerShape(8.dp),
                         color = Color(0xFFF1F5F9),
-                        modifier = Modifier.height(34.dp)
+                        modifier = Modifier.height(30.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.padding(horizontal = 8.dp)
                         ) {
-                            Icon(Icons.Default.MoreHoriz, contentDescription = null, tint = Color(0xFF475569), modifier = Modifier.size(16.dp))
-                            Text("المزيد", fontSize = 11.sp, color = Color(0xFF475569))
+                            Icon(Icons.Default.MoreHoriz, contentDescription = null, tint = Color(0xFF475569), modifier = Modifier.size(14.dp))
+                            Text("وسوم والمزيد", fontSize = 10.sp, color = Color(0xFF475569))
                         }
                     }
                 }
@@ -973,9 +1273,21 @@ private fun DocumentGridItemCard(
     progress: DocumentProgressEntity?,
     theme: AppThemeData,
     onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onOpenOptions: () -> Unit
 ) {
+    val context = LocalContext.current
     val ext = document.extension.uppercase()
+    var pdfCoverBitmap by remember(document.uriString) { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    LaunchedEffect(document.uriString, ext) {
+        if (ext == "PDF") {
+            pdfCoverBitmap = withContext(Dispatchers.IO) {
+                MultiFormatDocumentEngine.getOrRenderPdfCoverThumbnail(context, document.uriString)
+            }
+        }
+    }
+
     val badgeColor = when (ext) {
         "PDF" -> Color(0xFFEF4444)
         "EPUB" -> Color(0xFF8B5CF6)
@@ -1008,8 +1320,8 @@ private fun DocumentGridItemCard(
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1022,48 +1334,90 @@ private fun DocumentGridItemCard(
                 ) {
                     Text(
                         text = ext,
-                        fontSize = 10.sp,
+                        fontSize = 9.sp,
                         fontWeight = FontWeight.Black,
                         color = badgeColor,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
 
-                IconButton(
-                    onClick = onOpenOptions,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "خيارات", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (document.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "المفضلة",
+                            tint = if (document.isFavorite) Color(0xFFF59E0B) else Color.Gray,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onOpenOptions,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "خيارات", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
+                    .height(82.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(badgeColor.copy(alpha = 0.06f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(iconVector, contentDescription = null, tint = badgeColor, modifier = Modifier.size(38.dp))
+                if (pdfCoverBitmap != null) {
+                    Image(
+                        bitmap = pdfCoverBitmap!!.asImageBitmap(),
+                        contentDescription = "معاينة الصفحة الأولى",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(iconVector, contentDescription = null, tint = badgeColor, modifier = Modifier.size(36.dp))
+                }
             }
 
             Text(
                 text = document.name,
                 fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 color = Color(0xFF1E293B),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 16.sp
+                lineHeight = 15.sp
             )
+
+            if (document.tags.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    items(document.tags.take(2)) { tag ->
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFFF0FDFA)
+                        ) {
+                            Text(
+                                text = "#$tag",
+                                fontSize = 8.sp,
+                                color = Color(0xFF0F766E),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(sizeFormatted, fontSize = 10.sp, color = Color.Gray)
+                Text(sizeFormatted, fontSize = 9.sp, color = Color.Gray)
                 if (document.folderName != "الرئيسي") {
-                    Text("📁 ${document.folderName}", fontSize = 9.sp, color = Color(0xFF475569))
+                    Text("📁 ${document.folderName}", fontSize = 8.sp, color = Color(0xFF475569))
                 }
             }
 
@@ -1089,14 +1443,18 @@ private fun DocumentActionsBottomSheet(
     progress: DocumentProgressEntity?,
     theme: AppThemeData,
     availableFolders: List<String>,
+    availableTags: List<String>,
     onDismiss: () -> Unit,
     onRead: () -> Unit,
     onOpenConverter: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onUpdateTags: (List<String>) -> Unit,
     onMoveToFolder: (String) -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onCreateNewFolder: () -> Unit
 ) {
+    var newTagInput by remember { mutableStateOf("") }
     val ext = document.extension.uppercase()
     val badgeColor = when (ext) {
         "PDF" -> Color(0xFFEF4444)
@@ -1135,7 +1493,7 @@ private fun DocumentActionsBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 6.dp)
                 .navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Header Card
             Row(
@@ -1175,6 +1533,15 @@ private fun DocumentActionsBottomSheet(
                         Text("•", fontSize = 10.sp, color = Color.LightGray)
                         Text(dateFormatted, fontSize = 11.sp, color = Color.Gray)
                     }
+                }
+
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (document.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "المفضلة",
+                        tint = if (document.isFavorite) Color(0xFFF59E0B) else Color.Gray,
+                        modifier = Modifier.size(26.dp)
+                    )
                 }
             }
 
@@ -1217,7 +1584,7 @@ private fun DocumentActionsBottomSheet(
                     onClick = onRead,
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp),
+                        .height(58.dp),
                     shape = RoundedCornerShape(14.dp),
                     color = theme.primaryColor
                 ) {
@@ -1228,12 +1595,12 @@ private fun DocumentActionsBottomSheet(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.MenuBook, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.MenuBook, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                         }
                         Column {
                             Text("قراءة وعرض", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -1247,7 +1614,7 @@ private fun DocumentActionsBottomSheet(
                     onClick = onOpenConverter,
                     modifier = Modifier
                         .weight(1f)
-                        .height(64.dp),
+                        .height(58.dp),
                     shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFEEF2FF)
                 ) {
@@ -1258,12 +1625,12 @@ private fun DocumentActionsBottomSheet(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(Color(0xFF4F46E5).copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Transform, contentDescription = null, tint = Color(0xFF4F46E5), modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Transform, contentDescription = null, tint = Color(0xFF4F46E5), modifier = Modifier.size(18.dp))
                         }
                         Column {
                             Text("تحويل وأمان ⚡", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4F46E5))
@@ -1282,7 +1649,7 @@ private fun DocumentActionsBottomSheet(
                     onClick = onShare,
                     modifier = Modifier
                         .weight(1f)
-                        .height(56.dp),
+                        .height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFF1F5F9),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
@@ -1292,8 +1659,8 @@ private fun DocumentActionsBottomSheet(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF334155), modifier = Modifier.size(20.dp))
-                        Text("مشاركة الملف", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                        Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF334155), modifier = Modifier.size(18.dp))
+                        Text("مشاركة الملف", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
                     }
                 }
 
@@ -1302,7 +1669,7 @@ private fun DocumentActionsBottomSheet(
                     onClick = onDelete,
                     modifier = Modifier
                         .weight(1f)
-                        .height(56.dp),
+                        .height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFFEF2F2),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFEE2E2))
@@ -1312,25 +1679,82 @@ private fun DocumentActionsBottomSheet(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
-                        Text("إزالة من القائمة", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                        Text("إزالة من القائمة", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEF4444))
+                    }
+                }
+            }
+
+            // Custom Tags Section
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("الوسوم المخصصة للبحث والفرز (Tags 🏷️):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F766E))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(availableTags) { tag ->
+                        val isTagged = document.tags.contains(tag)
+                        FilterChip(
+                            selected = isTagged,
+                            onClick = {
+                                val next = if (isTagged) document.tags - tag else document.tags + tag
+                                onUpdateTags(next)
+                            },
+                            label = { Text("#$tag", fontSize = 10.sp) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFCCFBF1),
+                                selectedLabelColor = Color(0xFF0F766E),
+                                containerColor = Color(0xFFF8FAFC)
+                            ),
+                            leadingIcon = if (isTagged) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(13.dp)) }
+                            } else null,
+                            modifier = Modifier.heightIn(min = 32.dp)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = newTagInput,
+                        onValueChange = { newTagInput = it },
+                        placeholder = { Text("إضافة وسم جديد (مثل: فصل 1، مرجع)...", fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Button(
+                        onClick = {
+                            val clean = newTagInput.trim().removePrefix("#")
+                            if (clean.isNotBlank()) {
+                                onUpdateTags(document.tags + clean)
+                                newTagInput = ""
+                            }
+                        },
+                        enabled = newTagInput.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("+ وسم", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
             // Move to Folder Section
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("نقل الملف إلى مجلد:", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
+                    Text("نقل الملف إلى مجلد:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
                     TextButton(
                         onClick = onCreateNewFolder,
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Icon(Icons.Default.CreateNewFolder, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.CreateNewFolder, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("+ مجلد جديد", fontSize = 11.sp, color = theme.primaryColor, fontWeight = FontWeight.Bold)
                     }
@@ -1352,13 +1776,13 @@ private fun DocumentActionsBottomSheet(
                             leadingIcon = if (isCurrent) {
                                 { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
                             } else null,
-                            modifier = Modifier.heightIn(min = 38.dp)
+                            modifier = Modifier.heightIn(min = 34.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
         }
     }
 }

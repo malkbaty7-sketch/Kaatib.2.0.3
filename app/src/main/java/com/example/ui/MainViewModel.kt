@@ -557,6 +557,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recalculateEmotionSuggestions(currentList, editorSelectedEmotions.value)
     }
 
+    /**
+     * Sends a highlighted quote or passage directly from the Document Viewer into the active Editor chapter.
+     */
+    fun insertQuoteIntoActiveChapter(
+        quoteText: String,
+        sourceFileName: String,
+        positionLabel: String,
+        note: String = ""
+    ) {
+        val formattedQuote = buildString {
+            append("\n\n«")
+            append(quoteText.trim())
+            append("»\n")
+            append("— [المصدر: $sourceFileName • $positionLabel]")
+            if (note.isNotBlank()) {
+                append("\n💡 ملاحظة: ${note.trim()}")
+            }
+            append("\n")
+        }
+
+        val currentList = activeChapters.value.toMutableList()
+        if (currentList.isEmpty()) {
+            val newChapter = ChapterItem(
+                title = "اقتباسات ومراجع: $sourceFileName",
+                tabName = "مراجع 1",
+                content = formattedQuote.trimStart()
+            )
+            activeChapters.value = listOf(newChapter)
+            activeChapterIndex.value = 0
+        } else {
+            val idx = activeChapterIndex.value.coerceIn(0, currentList.lastIndex)
+            val existing = currentList[idx].content
+            val updatedContent = if (existing.isBlank()) formattedQuote.trimStart() else existing + formattedQuote
+            currentList[idx] = currentList[idx].copy(content = updatedContent)
+            activeChapters.value = currentList
+        }
+        saveCurrentProject()
+        saveToastMessage.value = "تم إرسال الاقتباس إلى الفصل الحالي في شاشة الكتابة ✍️"
+    }
+
+    /**
+     * Exports all document highlights, notes, and bookmarks as a dedicated new chapter in the Editor.
+     */
+    fun insertAnnotationsAsNewChapter(chapterTitle: String, summaryText: String) {
+        val currentList = activeChapters.value.toMutableList()
+        val newChapter = ChapterItem(
+            title = chapterTitle,
+            tabName = "ملاحظات ${currentList.size + 1}",
+            content = summaryText
+        )
+        currentList.add(newChapter)
+        activeChapters.value = currentList
+        activeChapterIndex.value = currentList.lastIndex
+        saveCurrentProject()
+        saveToastMessage.value = "تم إدراج ملخص الملاحظات والاقتباسات كفصل جديد في مشروعك 📚"
+    }
+
     fun updateActiveChapterImages(images: List<PageImageItem>) {
         val currentList = activeChapters.value.toMutableList()
         val idx = activeChapterIndex.value

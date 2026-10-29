@@ -52,6 +52,24 @@ data class DocumentBookmarkItem(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+data class DocumentHighlightItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val uriString: String,
+    val snippetText: String,
+    val note: String = "",
+    val colorHex: String = "#FDE047", // Yellow default
+    val positionIndex: Int = 0,
+    val positionLabel: String = "صفحة 1",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class DocumentOutlineItem(
+    val title: String,
+    val positionIndex: Int,
+    val subtitle: String = "",
+    val level: Int = 1
+)
+
 enum class DocumentCategory(val displayName: String, val icon: String) {
     ALL("الكل", "📁"),
     BOOKS("كتب رقمية (PDF / EPUB)", "📚"),
@@ -68,10 +86,13 @@ data class ScannedDocumentItem(
     val sizeBytes: Long,
     val lastModified: Long,
     val category: DocumentCategory,
-    val folderName: String = "الرئيسي"
+    val folderName: String = "الرئيسي",
+    val isFavorite: Boolean = false,
+    val tags: List<String> = emptyList()
 )
 
 object MultiFormatDocumentEngine {
+    private val pdfCoverCache = object : android.util.LruCache<String, Bitmap>(24) {}
 
     fun detectCategory(extension: String): DocumentCategory {
         return when (extension.lowercase()) {
@@ -154,6 +175,73 @@ object MultiFormatDocumentEngine {
             null
         } finally {
             try { page?.close() } catch (_: Exception) {}
+            try { renderer?.close() } catch (_: Exception) {}
+            try { pfd?.close() } catch (_: Exception) {}
+        }
+    }
+
+    fun getOrRenderPdfCoverThumbnail(context: Context, uriString: String): Bitmap? {
+        val cached = pdfCoverCache.get(uriString)
+        if (cached != null && !cached.isRecycled) return cached
+        val rendered = renderPdfPage(context, Uri.parse(uriString), pageIndex = 0, scaleFactor = 0.45f)
+        if (rendered != null) {
+            pdfCoverCache.put(uriString, rendered)
+        }
+        return rendered
+    }
+
+    /**
+     * Extracts a specific range of pages (1-indexed inclusive) from a PDF into a new standalone PDF file.
+     */
+    fun extractPdfPageRange(
+        context: Context,
+        sourceUri: Uri,
+        sourceFileName: String,
+        startPageOneIndexed: Int,
+        endPageOneIndexed: Int
+    ): File? {
+        var pfd: ParcelFileDescriptor? = null
+        var renderer: PdfRenderer? = null
+        val outPdf = android.graphics.pdf.PdfDocument()
+        return try {
+            pfd = openParcelFileDescriptor(context, sourceUri) ?: return null
+            renderer = PdfRenderer(pfd)
+            val total = renderer.pageCount
+            if (total <= 0) return null
+
+            val startIdx = (startPageOneIndexed - 1).coerceIn(0, total - 1)
+            val endIdx = (endPageOneIndexed - 1).coerceIn(startIdx, total - 1)
+
+            for (pageIdx in startIdx..endIdx) {
+                val page = renderer.openPage(pageIdx)
+                val w = page.width.coerceAtLeast(100)
+                val h = page.height.coerceAtLeast(100)
+                val bmp = Bitmap.createBitmap(w * 2, h * 2, Bitmap.Config.ARGB_8888)
+                bmp.eraseColor(Color.WHITE)
+                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                page.close()
+
+                val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(w, h, pageIdx - startIdx + 1).create()
+                val destPage = outPdf.startPage(pageInfo)
+                val destRect = android.graphics.Rect(0, 0, w, h)
+                destPage.canvas.drawBitmap(bmp, null, destRect, null)
+                outPdf.finishPage(destPage)
+                bmp.recycle()
+            }
+
+            val outDir = File(context.cacheDir, "conversions")
+            if (!outDir.exists()) outDir.mkdirs()
+            val cleanBase = sourceFileName.substringBeforeLast(".").replace(Regex("[^a-zA-Z0-9\\u0600-\\u06FF_-]"), "_")
+            val outFile = File(outDir, "${cleanBase}_صفحات_${startIdx + 1}_إلى_${endIdx + 1}.pdf")
+            FileOutputStream(outFile).use { fos ->
+                outPdf.writeTo(fos)
+            }
+            outFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            try { outPdf.close() } catch (_: Exception) {}
             try { renderer?.close() } catch (_: Exception) {}
             try { pfd?.close() } catch (_: Exception) {}
         }
@@ -700,12 +788,241 @@ object MultiFormatDocumentEngine {
     }
 
     // ==========================================
+    // Highlights, Notes, Favorites & Tags Helpers
+    // ==========================================
+
+    fun getDocumentHighlights(context: Context, uriString: String): List<DocumentHighlightItem> {
+        val prefs = context.getSharedPreferences("doc_highlights_prefs", Context.MODE_PRIVATE)
+        val raw = prefs.getString("hl_$uriString", null) ?: return emptyList()
+        return try {
+            val arr = org.json.JSONArray(raw)
+            val list = mutableListOf<DocumentHighlightItem>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    DocumentHighlightItem(
+                        id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                        uriString = uriString,
+                        snippetText = obj.optString("snippetText", ""),
+                        note = obj.optString("note", ""),
+                        colorHex = obj.optString("colorHex", "#FDE047"),
+                        positionIndex = obj.optInt("positionIndex", 0),
+                        positionLabel = obj.optString("positionLabel", "صفحة 1"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveDocumentHighlights(context: Context, uriString: String, list: List<DocumentHighlightItem>) {
+        val prefs = context.getSharedPreferences("doc_highlights_prefs", Context.MODE_PRIVATE)
+        val arr = org.json.JSONArray()
+        list.forEach { item ->
+            val obj = org.json.JSONObject().apply {
+                put("id", item.id)
+                put("snippetText", item.snippetText)
+                put("note", item.note)
+                put("colorHex", item.colorHex)
+                put("positionIndex", item.positionIndex)
+                put("positionLabel", item.positionLabel)
+                put("timestamp", item.timestamp)
+            }
+            arr.put(obj)
+        }
+        prefs.edit().putString("hl_$uriString", arr.toString()).apply()
+    }
+
+    fun formatAnnotationsSummary(
+        fileName: String,
+        bookmarks: List<DocumentBookmarkItem>,
+        highlights: List<DocumentHighlightItem>
+    ): String {
+        val sb = StringBuilder()
+        sb.append("■ ملخص الاقتباسات والملاحظات المرجعية\n")
+        sb.append("المصدر: $fileName\n")
+        sb.append("────────────────────────────────────\n\n")
+
+        if (highlights.isNotEmpty()) {
+            sb.append(" أولاً: الاقتباسات والتظليلات والملاحظات الهامشية (${highlights.size}):\n\n")
+            highlights.forEachIndexed { idx, hl ->
+                sb.append("${idx + 1}. [${hl.positionLabel}] «${hl.snippetText.trim()}»\n")
+                if (hl.note.isNotBlank()) {
+                    sb.append("   💡 ملاحظة: ${hl.note.trim()}\n")
+                }
+                sb.append("\n")
+            }
+        }
+
+        if (bookmarks.isNotEmpty()) {
+            sb.append(" ثانياً: العلامات المرجعية المحفوظة (${bookmarks.size}):\n")
+            bookmarks.forEachIndexed { idx, bm ->
+                sb.append("• ${idx + 1}. ${bm.label}\n")
+            }
+        }
+        return sb.toString().trim()
+    }
+
+    fun extractDocumentOutline(
+        extension: String,
+        epubBook: EpubBookContent?,
+        pptxPresentation: PptxPresentationContent?,
+        docxParagraphs: List<DocxParagraph>,
+        textDocumentContent: String,
+        pdfTotalPages: Int
+    ): List<DocumentOutlineItem> {
+        val outline = mutableListOf<DocumentOutlineItem>()
+        when (extension.lowercase()) {
+            "epub" -> {
+                epubBook?.chapters?.forEachIndexed { idx, ch ->
+                    outline.add(
+                        DocumentOutlineItem(
+                            title = ch.title,
+                            positionIndex = idx,
+                            subtitle = "فصل ${idx + 1} • ${ch.textContent.split(Regex("\\s+")).size} كلمة",
+                            level = 1
+                        )
+                    )
+                }
+            }
+            "pptx", "ppt" -> {
+                pptxPresentation?.slides?.forEachIndexed { idx, slide ->
+                    outline.add(
+                        DocumentOutlineItem(
+                            title = slide.title,
+                            positionIndex = idx,
+                            subtitle = "شريحة ${slide.slideNumber}",
+                            level = 1
+                        )
+                    )
+                }
+            }
+            "docx" -> {
+                docxParagraphs.forEachIndexed { idx, para ->
+                    val trimmed = para.text.trim()
+                    if (para.isHeading || (trimmed.length in 3..85 && (trimmed.startsWith("الفصل") || trimmed.startsWith("الباب") || trimmed.startsWith("■") || trimmed.startsWith("#") || trimmed.matches(Regex("^\\d+[.\\-].*"))))) {
+                        outline.add(
+                            DocumentOutlineItem(
+                                title = trimmed.removePrefix("#").removePrefix("■").trim(),
+                                positionIndex = idx,
+                                subtitle = "فقرة ${idx + 1}",
+                                level = if (para.isHeading) 1 else 2
+                            )
+                        )
+                    }
+                }
+            }
+            "pdf" -> {
+                if (pdfTotalPages > 0) {
+                    val step = if (pdfTotalPages <= 25) 1 else (pdfTotalPages / 20).coerceAtLeast(1)
+                    var p = 0
+                    while (p < pdfTotalPages) {
+                        outline.add(
+                            DocumentOutlineItem(
+                                title = if (p == 0) "الغلاف / الصفحة الأولى (1)" else "الصفحة ${p + 1}",
+                                positionIndex = p,
+                                subtitle = "انتقال مباشر للصفحة ${p + 1}",
+                                level = 1
+                            )
+                        )
+                        p += step
+                    }
+                    if (outline.lastOrNull()?.positionIndex != pdfTotalPages - 1) {
+                        outline.add(
+                            DocumentOutlineItem(
+                                title = "الصفحة الأخيرة ($pdfTotalPages)",
+                                positionIndex = pdfTotalPages - 1,
+                                subtitle = "نهاية المستند",
+                                level = 1
+                            )
+                        )
+                    }
+                }
+            }
+            else -> {
+                // TXT / MD / HTML headings
+                val lines = textDocumentContent.lines()
+                var charOffset = 0
+                lines.forEachIndexed { lineIdx, line ->
+                    val trimmed = line.trim()
+                    val isHeading = trimmed.length in 3..90 && (
+                        trimmed.startsWith("#") ||
+                        trimmed.startsWith("■") ||
+                        trimmed.startsWith("الفصل") ||
+                        trimmed.startsWith("الباب") ||
+                        trimmed.startsWith("المبحث") ||
+                        trimmed.startsWith("أولاً") ||
+                        trimmed.startsWith("ثانياً") ||
+                        trimmed.matches(Regex("^\\d+\\s*[.\\-)].+"))
+                    )
+                    if (isHeading) {
+                        outline.add(
+                            DocumentOutlineItem(
+                                title = trimmed.trimStart('#', '■', ' '),
+                                positionIndex = charOffset,
+                                subtitle = "سطر ${lineIdx + 1}",
+                                level = if (trimmed.startsWith("##")) 2 else 1
+                            )
+                        )
+                    }
+                    charOffset += line.length + 1
+                }
+            }
+        }
+        return outline
+    }
+
+    fun getFavoriteDocumentUris(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences("doc_meta_prefs", Context.MODE_PRIVATE)
+        return prefs.getStringSet("favorite_uris", emptySet()) ?: emptySet()
+    }
+
+    fun toggleFavoriteDocument(context: Context, uriString: String): Boolean {
+        val prefs = context.getSharedPreferences("doc_meta_prefs", Context.MODE_PRIVATE)
+        val current = (prefs.getStringSet("favorite_uris", emptySet()) ?: emptySet()).toMutableSet()
+        val isNowFav = if (current.contains(uriString)) {
+            current.remove(uriString)
+            false
+        } else {
+            current.add(uriString)
+            true
+        }
+        prefs.edit().putStringSet("favorite_uris", current).apply()
+        return isNowFav
+    }
+
+    fun getDocumentTags(context: Context, uriString: String): List<String> {
+        val prefs = context.getSharedPreferences("doc_meta_prefs", Context.MODE_PRIVATE)
+        val raw = prefs.getString("tags_$uriString", "") ?: ""
+        return raw.split("|||").map { it.trim() }.filter { it.isNotBlank() }
+    }
+
+    fun saveDocumentTags(context: Context, uriString: String, tags: List<String>) {
+        val prefs = context.getSharedPreferences("doc_meta_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("tags_$uriString", tags.distinct().joinToString("|||")).apply()
+    }
+
+    fun getDocumentFolderOverride(context: Context, uriString: String): String? {
+        val prefs = context.getSharedPreferences("doc_meta_prefs", Context.MODE_PRIVATE)
+        return prefs.getString("folder_$uriString", null)
+    }
+
+    fun saveDocumentFolderOverride(context: Context, uriString: String, folderName: String) {
+        val prefs = context.getSharedPreferences("doc_meta_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("folder_$uriString", folderName).apply()
+    }
+
+    // ==========================================
     // 5. Phone Storage Scanner (Auto-Scan)
     // ==========================================
 
     fun scanStorageDocuments(context: Context): List<ScannedDocumentItem> {
         val list = mutableListOf<ScannedDocumentItem>()
         val seenPaths = mutableSetOf<String>()
+        val favUris = getFavoriteDocumentUris(context)
 
         try {
             // Scan App External & Cache files directories
@@ -720,7 +1037,7 @@ object MultiFormatDocumentEngine {
 
             for (dir in targetDirs) {
                 if (dir.exists() && dir.isDirectory) {
-                    scanDirectoryRecursive(dir, list, seenPaths, maxDepth = 3)
+                    scanDirectoryRecursive(context, dir, list, seenPaths, favUris, maxDepth = 3)
                 }
             }
         } catch (e: Exception) {
@@ -729,16 +1046,18 @@ object MultiFormatDocumentEngine {
 
         // Add sample demo documents if empty, so the user immediately sees a rich explorer
         if (list.isEmpty()) {
-            list.addAll(getSampleCatalogDocuments(context))
+            list.addAll(getSampleCatalogDocuments(context, favUris))
         }
 
         return list.sortedByDescending { it.lastModified }
     }
 
     private fun scanDirectoryRecursive(
+        context: Context,
         dir: File,
         results: MutableList<ScannedDocumentItem>,
         seen: MutableSet<String>,
+        favUris: Set<String>,
         maxDepth: Int
     ) {
         if (maxDepth <= 0) return
@@ -747,20 +1066,27 @@ object MultiFormatDocumentEngine {
 
         for (file in files) {
             if (file.isDirectory && !file.name.startsWith(".")) {
-                scanDirectoryRecursive(file, results, seen, maxDepth - 1)
+                scanDirectoryRecursive(context, file, results, seen, favUris, maxDepth - 1)
             } else if (file.isFile && file.length() > 0) {
                 val ext = file.extension.lowercase()
                 if (validExts.contains(ext) && seen.add(file.absolutePath)) {
+                    val uriStr = Uri.fromFile(file).toString()
                     val cat = if (file.parentFile?.name == "conversions") DocumentCategory.CONVERTED else detectCategory(ext)
+                    val defaultFolder = if (file.parentFile?.name == "conversions") "المحولة" else "الرئيسي"
+                    val folder = getDocumentFolderOverride(context, uriStr) ?: defaultFolder
+                    val isFav = favUris.contains(uriStr) || folder == "المفضلة"
+                    val tags = getDocumentTags(context, uriStr)
                     results.add(
                         ScannedDocumentItem(
-                            uriString = Uri.fromFile(file).toString(),
+                            uriString = uriStr,
                             name = file.name,
                             extension = ext,
                             sizeBytes = file.length(),
                             lastModified = file.lastModified(),
                             category = cat,
-                            folderName = if (file.parentFile?.name == "conversions") "المحولة" else "الرئيسي"
+                            folderName = folder,
+                            isFavorite = isFav,
+                            tags = tags
                         )
                     )
                 }
@@ -768,7 +1094,7 @@ object MultiFormatDocumentEngine {
         }
     }
 
-    private fun getSampleCatalogDocuments(context: Context): List<ScannedDocumentItem> {
+    private fun getSampleCatalogDocuments(context: Context, favUris: Set<String> = emptySet()): List<ScannedDocumentItem> {
         // Create demo documents in app files directory so they can actually be opened and rendered!
         val demoDir = File(context.filesDir, "sample_documents")
         if (!demoDir.exists()) demoDir.mkdirs()
@@ -783,6 +1109,8 @@ object MultiFormatDocumentEngine {
                 في أزقة المدينة القديمة، حين كان المطر ينهمر برفق على حجارة البازلت العتيقة، كان يوسف يحمل حقيبته الجلدية البالية متوجهاً نحو المكتبة المنسية.
                 
                 لم تكن تلك الليلة كأي ليلة عادية، فقد وصلت رسالة غامضة مختومة بالشمع الأحمر تشير إلى وجود مخطوطة نادرة لم تُفتح منذ أكثر من قرن كامل.
+                
+                ■ الفصل الثاني: سر المخطوطة العتيقة
                 
                 أسرع يوسف خطواته، بينما كانت أضواء الفوانيس تتراقص في برك الماء الصغيرة. وحين وصل إلى الباب الخشبي الضخم، أدار المفتاح النحاسي لتصدر الأقفال صوتاً عميقاً...
                 
@@ -826,14 +1154,21 @@ object MultiFormatDocumentEngine {
             if (!file.exists()) {
                 file.writeText(content, Charsets.UTF_8)
             }
+            val uriStr = Uri.fromFile(file).toString()
+            val folder = getDocumentFolderOverride(context, uriStr) ?: "الرئيسي"
+            val isFav = favUris.contains(uriStr) || folder == "المفضلة"
+            val tags = getDocumentTags(context, uriStr)
             result.add(
                 ScannedDocumentItem(
-                    uriString = Uri.fromFile(file).toString(),
+                    uriString = uriStr,
                     name = name,
                     extension = ext,
                     sizeBytes = file.length(),
                     lastModified = file.lastModified(),
-                    category = detectCategory(ext)
+                    category = detectCategory(ext),
+                    folderName = folder,
+                    isFavorite = isFav,
+                    tags = tags
                 )
             )
         }
