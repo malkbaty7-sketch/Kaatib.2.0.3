@@ -2,10 +2,9 @@ name: Build Signed Android APK (katib v2.0.3)
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ '**' ]
     tags: [ 'v*' ]
   pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -374,7 +373,7 @@ jobs:
 
       - name: Build Signed Release APK & Debug APK
         run: |
-          gradle assembleRelease assembleDebug -x lintVitalRelease --no-daemon --no-configuration-cache --stacktrace
+          gradle assembleRelease assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
       - name: Copy APKs with friendly filenames
         shell: bash
