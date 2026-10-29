@@ -62,12 +62,15 @@ import com.example.ui.components.TtsPlayerBar
 import com.example.util.AccessDatabaseInfo
 import com.example.util.DocmoDocumentBridge
 import com.example.util.DocumentBookmarkItem
+import com.example.util.DocumentFlashcardItem
 import com.example.util.DocumentHighlightItem
 import com.example.util.DocumentOutlineItem
 import com.example.util.DocumentParser
 import com.example.util.EpubBookContent
 import com.example.util.MultiFormatDocumentEngine
 import com.example.util.PdfDiagnosticReport
+import com.example.util.PdfInkStroke
+import com.example.util.PdfStampItem
 import com.example.util.PptxPresentationContent
 import com.example.util.SpreadsheetContent
 import com.example.util.TtsManager
@@ -145,6 +148,39 @@ fun MultiFormatDocumentViewerScreen(
     var isSearchActive by remember { mutableStateOf(false) }
     var currentSearchMatchIndex by remember { mutableIntStateOf(0) }
     var pdfExtractedFullText by remember { mutableStateOf("") }
+
+    // Pro Workstation Package 1: PDF Freehand Ink Drawing, Stamps & Electronic Signatures
+    var isPdfDrawingMode by remember { mutableStateOf(false) }
+    var pdfInkStrokes by remember { mutableStateOf<List<PdfInkStroke>>(emptyList()) }
+    var pdfStamps by remember { mutableStateOf<List<PdfStampItem>>(emptyList()) }
+    var activeInkColorHex by remember { mutableStateOf("#EF4444") }
+    var activeInkStrokeWidth by remember { mutableFloatStateOf(4f) }
+    var activeInkAlpha by remember { mutableFloatStateOf(0.9f) }
+    var showPdfStampDialog by remember { mutableStateOf(false) }
+
+    // Pro Workstation Package 2: Smart Research Assistant & Instant Translation
+    var showSmartResearchSheet by remember { mutableStateOf(false) }
+
+    // Pro Workstation Package 3: Split-Screen Dual Document & Live Quick Scratchpad
+    var isSplitScreenActive by remember { mutableStateOf(false) }
+
+    // Pro Workstation Package 4: Academic Citation Generator & Flashcards / Glossary Builder
+    var flashcards by remember { mutableStateOf<List<DocumentFlashcardItem>>(emptyList()) }
+    var showFlashcardsAndCitationSheet by remember { mutableStateOf(false) }
+
+    // Pro Workstation Package 5: PDF Power Tools (Rotation, Deletion, Watermark, Merge & Live OCR)
+    var showPdfPowerToolsDialog by remember { mutableStateOf(false) }
+    var pdfPageRotations by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    var pdfDeletedPages by remember { mutableStateOf<Set<Int>>(emptySet()) }
+
+    // Pro Workstation Package 6: Reading Focus Ruler, Pomodoro Timer & Offline Ambient Focus Sounds
+    var showFocusStudioDialog by remember { mutableStateOf(false) }
+    var showFocusRuler by remember { mutableStateOf(false) }
+    var focusRulerYFraction by remember { mutableFloatStateOf(0.42f) }
+    var isPomodoroRunning by remember { mutableStateOf(false) }
+    var pomodoroRemainingSeconds by remember { mutableIntStateOf(25 * 60) }
+    var activeAmbientSoundMode by remember { mutableStateOf("OFF") }
+    var readingSpeedWpm by remember { mutableIntStateOf(180) }
 
     // Format specific states
     // PDF
@@ -349,9 +385,22 @@ fun MultiFormatDocumentViewerScreen(
         }
     }
 
-    // Auto-save on back or disposal & cleanup TTS
+    // Pomodoro Countdown Timer Effect
+    LaunchedEffect(isPomodoroRunning) {
+        while (isPomodoroRunning && pomodoroRemainingSeconds > 0) {
+            delay(1000L)
+            pomodoroRemainingSeconds--
+            if (pomodoroRemainingSeconds == 0) {
+                isPomodoroRunning = false
+                Toast.makeText(context, "انتهت جلسة التركيز (Pomodoro) بنجاح! خذ استراحة قصيرة ☕", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Auto-save on back or disposal & cleanup TTS + Ambient Audio
     DisposableEffect(Unit) {
         onDispose {
+            MultiFormatDocumentEngine.stopAmbientFocusSound()
             ttsManager.shutdown()
             saveCurrentProgress()
         }
@@ -361,18 +410,22 @@ fun MultiFormatDocumentViewerScreen(
         if (isImmersiveFullscreen) {
             isImmersiveFullscreen = false
         } else {
+            MultiFormatDocumentEngine.stopAmbientFocusSound()
             ttsManager.stop()
             saveCurrentProgress()
             onBack()
         }
     }
 
-    // Load Document Content & Initial Progress & Bookmarks & Highlights
+    // Load Document Content & Initial Progress & Bookmarks & Highlights & Workstation Data
     LaunchedEffect(uriString) {
         isLoading = true
         withContext(Dispatchers.IO) {
             bookmarks = MultiFormatDocumentEngine.getDocumentBookmarks(context, uriString)
             highlights = MultiFormatDocumentEngine.getDocumentHighlights(context, uriString)
+            flashcards = MultiFormatDocumentEngine.getDocumentFlashcards(context, uriString)
+            pdfInkStrokes = MultiFormatDocumentEngine.getPdfInkStrokes(context, uriString)
+            pdfStamps = MultiFormatDocumentEngine.getPdfStamps(context, uriString)
             val initialSaved = viewModel.getDocumentProgressSync(uriString)
             when (extension) {
                 "pdf" -> {
@@ -528,18 +581,25 @@ fun MultiFormatDocumentViewerScreen(
                                         overflow = TextOverflow.Ellipsis,
                                         color = readerTheme.text
                                     )
+                                    val totalWordsCount = remember(currentReadableText) {
+                                        currentReadableText.split(Regex("\\s+")).count { it.isNotBlank() }
+                                    }
+                                    val estMins = (totalWordsCount / readingSpeedWpm.coerceAtLeast(60)).coerceAtLeast(1)
                                     val progressDisplay = when (extension) {
-                                        "pdf" -> if (pdfTotalPages > 0) "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages" else "PDF"
-                                        "epub" -> epubBook?.let { "فصل ${epubCurrentChapterIndex + 1} / ${it.chapters.size}" } ?: "EPUB"
+                                        "pdf" -> if (pdfTotalPages > 0) "صفحة ${pdfCurrentPage + 1} / $pdfTotalPages • ~$estMins د" else "PDF"
+                                        "epub" -> epubBook?.let { "فصل ${epubCurrentChapterIndex + 1} / ${it.chapters.size} • ~$estMins د" } ?: "EPUB"
                                         "pptx", "ppt" -> pptxPresentation?.let { "شريحة ${pptxCurrentSlideIndex + 1} / ${it.slides.size}" } ?: "PowerPoint"
                                         else -> {
                                             val pct = if (textScrollState.maxValue > 0) {
                                                 ((textScrollState.value.toFloat() / textScrollState.maxValue.toFloat()) * 100).toInt()
                                             } else 0
-                                            "تقدم: $pct%"
+                                            "تقدم: $pct% • ~$estMins د"
                                         }
                                     }
-                                    Text(progressDisplay, fontSize = 8.sp, color = Color.Gray)
+                                    val pomoTag = if (isPomodoroRunning) {
+                                        " • ⏱️ ${pomodoroRemainingSeconds / 60}:${String.format(java.util.Locale.US, "%02d", pomodoroRemainingSeconds % 60)}"
+                                    } else ""
+                                    Text(progressDisplay + pomoTag, fontSize = 8.sp, color = Color.Gray, maxLines = 1)
                                 }
                             }
 
@@ -748,6 +808,197 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             }
                         }
+                    }
+
+                    // Pro Workstation Quick Ribbon (All 6 Advanced Upgrade Packages)
+                    Surface(
+                        color = readerTheme.surface,
+                        tonalElevation = 2.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Package 1: PDF Freehand Ink & Stamps
+                            if (extension == "pdf") {
+                                item {
+                                    Surface(
+                                        onClick = { isPdfDrawingMode = !isPdfDrawingMode },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isPdfDrawingMode) Color(0xFFDC2626) else Color(0xFFDC2626).copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = "🖌️ قلم وتوقيع PDF",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isPdfDrawingMode) Color.White else Color(0xFFDC2626),
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Package 2: Smart Research Assistant & Instant Translation
+                            item {
+                                Surface(
+                                    onClick = { showSmartResearchSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = theme.primaryColor.copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = "🧠 تلخيص وترجمة فورية",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = theme.primaryColor,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Package 3: Split-Screen Reference + Live Scratchpad
+                            item {
+                                Surface(
+                                    onClick = { isSplitScreenActive = !isSplitScreenActive },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSplitScreenActive) Color(0xFF059669) else Color(0xFF059669).copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = if (isSplitScreenActive) "🪟 إغلاق التقسيم" else "🪟 تقسيم الشاشة والمسودة",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSplitScreenActive) Color.White else Color(0xFF059669),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Package 4: Academic Citations & Flashcards / Glossary
+                            item {
+                                Surface(
+                                    onClick = { showFlashcardsAndCitationSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF7C3AED).copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = "🎓 التوثيق والبطاقات (${flashcards.size})",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF7C3AED),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Package 5: PDF Power Tools & Live OCR
+                            if (extension == "pdf") {
+                                item {
+                                    Surface(
+                                        onClick = { showPdfPowerToolsDialog = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF0284C7).copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = "🛠️ هندسة PDF و OCR",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0284C7),
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Package 6: Reading Focus Ruler & Pomodoro + Ambient Focus Sounds
+                            item {
+                                Surface(
+                                    onClick = { showFocusRuler = !showFocusRuler },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (showFocusRuler) Color(0xFFD97706) else Color(0xFFD97706).copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = "📏 مسطرة التركيز",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (showFocusRuler) Color.White else Color(0xFFD97706),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            item {
+                                Surface(
+                                    onClick = { showFocusStudioDialog = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isPomodoroRunning || activeAmbientSoundMode != "OFF") Color(0xFF0D9488) else Color(0xFF0D9488).copy(alpha = 0.12f)
+                                ) {
+                                    Text(
+                                        text = if (activeAmbientSoundMode != "OFF") "🎧 بومودورو وصوت نشط" else "⏱️ بومودورو وأصوات التركيز",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isPomodoroRunning || activeAmbientSoundMode != "OFF") Color.White else Color(0xFF0D9488),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // PDF Freehand Ink Drawing Toolbar when active
+                    AnimatedVisibility(visible = extension == "pdf" && isPdfDrawingMode) {
+                        PdfDrawingToolbar(
+                            activeColorHex = activeInkColorHex,
+                            activeStrokeWidth = activeInkStrokeWidth,
+                            activeAlpha = activeInkAlpha,
+                            onColorChange = { activeInkColorHex = it },
+                            onToolPresetChange = { w, a ->
+                                activeInkStrokeWidth = w
+                                activeInkAlpha = a
+                            },
+                            onUndoLastStroke = {
+                                val pageStrokes = pdfInkStrokes.filter { it.pageIndex == pdfCurrentPage }
+                                if (pageStrokes.isNotEmpty()) {
+                                    val lastId = pageStrokes.last().id
+                                    val updated = pdfInkStrokes.filter { it.id != lastId }
+                                    pdfInkStrokes = updated
+                                    MultiFormatDocumentEngine.savePdfInkStrokes(context, uriString, updated)
+                                }
+                            },
+                            onClearPageStrokes = {
+                                val updatedStrokes = pdfInkStrokes.filter { it.pageIndex != pdfCurrentPage }
+                                val updatedStamps = pdfStamps.filter { it.pageIndex != pdfCurrentPage }
+                                pdfInkStrokes = updatedStrokes
+                                pdfStamps = updatedStamps
+                                MultiFormatDocumentEngine.savePdfInkStrokes(context, uriString, updatedStrokes)
+                                MultiFormatDocumentEngine.savePdfStamps(context, uriString, updatedStamps)
+                                Toast.makeText(context, "تم مسح رسومات وأختام هذه الصفحة", Toast.LENGTH_SHORT).show()
+                            },
+                            onOpenStampDialog = { showPdfStampDialog = true },
+                            onExportAnnotatedPdf = {
+                                coroutineScope.launch {
+                                    val outFile = withContext(Dispatchers.IO) {
+                                        MultiFormatDocumentEngine.exportAnnotatedAndModifiedPdf(
+                                            context = context,
+                                            sourceUri = uri,
+                                            sourceFileName = fileName,
+                                            strokes = pdfInkStrokes,
+                                            stamps = pdfStamps,
+                                            pageRotations = pdfPageRotations,
+                                            deletedPages = pdfDeletedPages
+                                        )
+                                    }
+                                    if (outFile != null) {
+                                        pendingFileToSave = outFile
+                                        Toast.makeText(context, "تم دمج الرسومات والتوقيعات في ملف PDF جديد!", Toast.LENGTH_LONG).show()
+                                        saveToDeviceLauncher.launch(outFile.name)
+                                    }
+                                }
+                            },
+                            onCloseDrawingMode = { isPdfDrawingMode = false }
+                        )
                     }
 
                     // Interactive Search Bar with Next/Previous Match & Counter
@@ -1241,59 +1492,91 @@ fun MultiFormatDocumentViewerScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CircularProgressIndicator(color = theme.primaryColor)
-                        Text("جارٍ تحميل ومعالجة المستند...", color = Color.Gray, fontSize = 12.sp)
-                    }
-                }
-            } else {
-                when (extension) {
-                    "pdf" -> {
-                        if (isPdfContinuousSelectionView) {
-                            com.example.ui.screens.PdfReaderWithTextSelectionScreen(
-                                pdfUri = uri,
-                                fileName = fileName,
-                                initialPageIndex = pdfCurrentPage,
-                                onBack = { isPdfContinuousSelectionView = false },
-                                onCopyText = { selectedText ->
-                                    activeQuoteDraft = selectedText
-                                    activeQuoteNote = ""
-                                },
-                                onSaveProgress = { pageIndex, _ ->
-                                    pdfCurrentPage = pageIndex
-                                    saveCurrentProgress()
-                                }
-                            )
-                        } else {
-                            PdfPageView(
-                                bitmap = pdfBitmap,
-                                scale = pdfScale,
-                                offset = pdfOffset,
-                                colorFilterMode = effectivePdfColorMode,
-                                onTransform = { s, o ->
-                                    pdfScale = (pdfScale * s).coerceIn(1f, 4f)
-                                    pdfOffset += o
-                                },
-                                onSingleTap = {
-                                    isImmersiveFullscreen = !isImmersiveFullscreen
-                                },
-                                onSwipeNext = {
-                                    if (pdfCurrentPage < pdfTotalPages - 1) {
-                                        pdfCurrentPage++
-                                        saveCurrentProgress()
-                                    }
-                                },
-                                onSwipePrevious = {
-                                    if (pdfCurrentPage > 0) {
-                                        pdfCurrentPage--
-                                        saveCurrentProgress()
-                                    }
-                                }
-                            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(color = theme.primaryColor)
+                                Text("جارٍ تحميل ومعالجة المستند...", color = Color.Gray, fontSize = 12.sp)
+                            }
                         }
-                    }
+                    } else {
+                        when (extension) {
+                            "pdf" -> {
+                                if (isPdfContinuousSelectionView) {
+                                    com.example.ui.screens.PdfReaderWithTextSelectionScreen(
+                                        pdfUri = uri,
+                                        fileName = fileName,
+                                        initialPageIndex = pdfCurrentPage,
+                                        onBack = { isPdfContinuousSelectionView = false },
+                                        onCopyText = { selectedText ->
+                                            activeQuoteDraft = selectedText
+                                            activeQuoteNote = ""
+                                        },
+                                        onSaveProgress = { pageIndex, _ ->
+                                            pdfCurrentPage = pageIndex
+                                            saveCurrentProgress()
+                                        }
+                                    )
+                                } else {
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        PdfPageView(
+                                            bitmap = pdfBitmap,
+                                            scale = pdfScale,
+                                            offset = pdfOffset,
+                                            rotationDegrees = pdfPageRotations[pdfCurrentPage] ?: 0f,
+                                            colorFilterMode = effectivePdfColorMode,
+                                            onTransform = { s, o ->
+                                                pdfScale = (pdfScale * s).coerceIn(1f, 4f)
+                                                pdfOffset += o
+                                            },
+                                            onSingleTap = {
+                                                if (!isPdfDrawingMode) {
+                                                    isImmersiveFullscreen = !isImmersiveFullscreen
+                                                }
+                                            },
+                                            onSwipeNext = {
+                                                if (!isPdfDrawingMode && pdfCurrentPage < pdfTotalPages - 1) {
+                                                    pdfCurrentPage++
+                                                    saveCurrentProgress()
+                                                }
+                                            },
+                                            onSwipePrevious = {
+                                                if (!isPdfDrawingMode && pdfCurrentPage > 0) {
+                                                    pdfCurrentPage--
+                                                    saveCurrentProgress()
+                                                }
+                                            }
+                                        )
+
+                                        // Freehand Ink Strokes & Electronic Stamps/Signatures Overlay
+                                        PdfFreehandInkAndStampOverlay(
+                                            pageIndex = pdfCurrentPage,
+                                            isDrawingEnabled = isPdfDrawingMode,
+                                            activeColorHex = activeInkColorHex,
+                                            activeStrokeWidth = activeInkStrokeWidth,
+                                            activeAlpha = activeInkAlpha,
+                                            strokes = pdfInkStrokes,
+                                            stamps = pdfStamps,
+                                            onAddStroke = { newStroke ->
+                                                val updated = pdfInkStrokes + newStroke
+                                                pdfInkStrokes = updated
+                                                MultiFormatDocumentEngine.savePdfInkStrokes(context, uriString, updated)
+                                            },
+                                            onRemoveStamp = { stampId ->
+                                                val updated = pdfStamps.filter { it.id != stampId }
+                                                pdfStamps = updated
+                                                MultiFormatDocumentEngine.savePdfStamps(context, uriString, updated)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
                     "epub" -> {
                         val currentChapter = epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)
                         if (currentChapter != null) {
@@ -1681,7 +1964,42 @@ fun MultiFormatDocumentViewerScreen(
                             }
                         }
                     }
+                    }
                 }
+                }
+
+                // Package 3: Split-Screen Dual Document & Live Quick Scratchpad Pane
+                if (isSplitScreenActive) {
+                    SplitScreenReferenceAndScratchpadPane(
+                        primaryUriString = uriString,
+                        primaryFileName = fileName,
+                        currentPositionLabel = currentPositionLabel,
+                        theme = theme,
+                        readerTheme = readerTheme,
+                        onSendDraftToEditor = { draftText ->
+                            viewModel.insertQuoteIntoActiveChapter(
+                                quoteText = draftText,
+                                sourceFileName = fileName,
+                                positionLabel = currentPositionLabel,
+                                note = "مسودة مكتوبة أثناء قراءة المرجع"
+                            )
+                        },
+                        onCloseSplitScreen = { isSplitScreenActive = false },
+                        modifier = Modifier
+                            .weight(0.85f)
+                            .fillMaxWidth()
+                    )
+                }
+            }
+
+            // Package 6: Draggable Reading Focus Ruler / Line Mask Overlay
+            if (showFocusRuler) {
+                ReadingFocusRulerOverlay(
+                    rulerYFraction = focusRulerYFraction,
+                    primaryColor = theme.primaryColor,
+                    onUpdateYFraction = { focusRulerYFraction = it },
+                    onCloseRuler = { showFocusRuler = false }
+                )
             }
 
             // Floating Exit Fullscreen Pill when Immersive Fullscreen is active
@@ -2284,6 +2602,142 @@ fun MultiFormatDocumentViewerScreen(
             }
         )
     }
+
+    // Pro Workstation Package 1 Dialog: PDF Stamps & Electronic Signature
+    if (showPdfStampDialog) {
+        PdfStampAndSignatureDialog(
+            pageIndex = pdfCurrentPage,
+            onAddStamp = { newStamp ->
+                val updated = pdfStamps + newStamp
+                pdfStamps = updated
+                MultiFormatDocumentEngine.savePdfStamps(context, uriString, updated)
+                Toast.makeText(context, "تم إدراج الختم/التوقيع على الصفحة ${pdfCurrentPage + 1} ✍️", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showPdfStampDialog = false }
+        )
+    }
+
+    // Pro Workstation Package 2 Sheet: Smart Research Assistant, Summarization & Instant Translation
+    if (showSmartResearchSheet) {
+        SmartResearchAndTranslationSheet(
+            fileName = fileName,
+            currentPositionLabel = currentPositionLabel,
+            activeReadableText = currentReadableText,
+            theme = theme,
+            readerTheme = readerTheme,
+            onInsertIntoEditor = { quoteText, note ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = quoteText,
+                    sourceFileName = fileName,
+                    positionLabel = currentPositionLabel,
+                    note = note
+                )
+            },
+            onAddFlashcards = { newCards ->
+                val updated = flashcards + newCards
+                flashcards = updated
+                MultiFormatDocumentEngine.saveDocumentFlashcards(context, uriString, updated)
+            },
+            onDismiss = { showSmartResearchSheet = false }
+        )
+    }
+
+    // Pro Workstation Package 4 Sheet: Academic Citation Generator & Flashcards / Glossary Builder
+    if (showFlashcardsAndCitationSheet) {
+        FlashcardsAndCitationGeneratorSheet(
+            uriString = uriString,
+            fileName = fileName,
+            currentPositionLabel = currentPositionLabel,
+            highlights = highlights,
+            flashcards = flashcards,
+            theme = theme,
+            readerTheme = readerTheme,
+            onUpdateFlashcards = { updated ->
+                flashcards = updated
+                MultiFormatDocumentEngine.saveDocumentFlashcards(context, uriString, updated)
+            },
+            onInsertCitationIntoEditor = { citationText ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = citationText,
+                    sourceFileName = fileName,
+                    positionLabel = currentPositionLabel,
+                    note = "توثيق مرجعي أكاديمي"
+                )
+            },
+            onDismiss = { showFlashcardsAndCitationSheet = false }
+        )
+    }
+
+    // Pro Workstation Package 5 Dialog: PDF Power Tools (Rotation, Deletion, Watermark, Merge & Live OCR)
+    if (showPdfPowerToolsDialog && extension == "pdf") {
+        PdfPowerToolsAndOcrDialog(
+            uri = uri,
+            fileName = fileName,
+            currentPageIndex = pdfCurrentPage,
+            totalPages = pdfTotalPages,
+            currentRotation = pdfPageRotations[pdfCurrentPage] ?: 0f,
+            isCurrentPageDeleted = pdfDeletedPages.contains(pdfCurrentPage),
+            extractedTextForOcr = pdfExtractedFullText,
+            strokes = pdfInkStrokes,
+            stamps = pdfStamps,
+            pageRotations = pdfPageRotations,
+            deletedPages = pdfDeletedPages,
+            theme = theme,
+            onRotateCurrentPage = { newRot ->
+                pdfPageRotations = pdfPageRotations.toMutableMap().apply { put(pdfCurrentPage, newRot) }
+                Toast.makeText(context, "تم تدوير الصفحة ${pdfCurrentPage + 1} (${newRot.toInt()}°)", Toast.LENGTH_SHORT).show()
+            },
+            onToggleDeleteCurrentPage = {
+                pdfDeletedPages = if (pdfDeletedPages.contains(pdfCurrentPage)) {
+                    pdfDeletedPages - pdfCurrentPage
+                } else {
+                    pdfDeletedPages + pdfCurrentPage
+                }
+            },
+            onSendOcrTextToEditor = { ocrText ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = ocrText,
+                    sourceFileName = fileName,
+                    positionLabel = "صفحة ${pdfCurrentPage + 1} (ماسح OCR)",
+                    note = "نص مستخرج بالماسح الضوئي OCR"
+                )
+            },
+            onExportFileReady = { exportedFile ->
+                pendingFileToSave = exportedFile
+                Toast.makeText(context, "تم تجهيز الملف (${exportedFile.name}) بنجاح! اختر مكان الحفظ", Toast.LENGTH_LONG).show()
+                saveToDeviceLauncher.launch(exportedFile.name)
+            },
+            onDismiss = { showPdfPowerToolsDialog = false }
+        )
+    }
+
+    // Pro Workstation Package 6 Dialog: Pomodoro Timer, Focus Ruler & Offline Synthesized Ambient Focus Audio
+    if (showFocusStudioDialog) {
+        val totalWords = remember(currentReadableText) {
+            currentReadableText.split(Regex("\\s+")).count { it.isNotBlank() }
+        }
+        FocusPomodoroAndAmbientDialog(
+            isPomodoroRunning = isPomodoroRunning,
+            pomodoroRemainingSeconds = pomodoroRemainingSeconds,
+            activeAmbientSoundMode = activeAmbientSoundMode,
+            showFocusRuler = showFocusRuler,
+            readingSpeedWpm = readingSpeedWpm,
+            totalWordCount = totalWords,
+            theme = theme,
+            onTogglePomodoro = { isPomodoroRunning = !isPomodoroRunning },
+            onResetPomodoro = { minutes ->
+                isPomodoroRunning = false
+                pomodoroRemainingSeconds = minutes * 60
+            },
+            onSelectAmbientSound = { mode ->
+                activeAmbientSoundMode = mode
+                MultiFormatDocumentEngine.startAmbientFocusSound(mode)
+            },
+            onToggleFocusRuler = { showFocusRuler = it },
+            onUpdateWpm = { readingSpeedWpm = it },
+            onDismiss = { showFocusStudioDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -2435,6 +2889,7 @@ private fun PdfPageView(
     bitmap: Bitmap?,
     scale: Float,
     offset: androidx.compose.ui.geometry.Offset,
+    rotationDegrees: Float = 0f,
     colorFilterMode: String = "NORMAL",
     onTransform: (Float, androidx.compose.ui.geometry.Offset) -> Unit,
     onSingleTap: () -> Unit = {},
@@ -2526,7 +2981,8 @@ private fun PdfPageView(
                         scaleX = scale,
                         scaleY = scale,
                         translationX = offset.x,
-                        translationY = offset.y
+                        translationY = offset.y,
+                        rotationZ = rotationDegrees
                     ),
                 contentScale = ContentScale.Fit
             )
