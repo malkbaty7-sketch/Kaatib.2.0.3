@@ -47,8 +47,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.util.MultiFormatDocumentEngine
 import com.example.util.PdfAnnotator
 import com.example.util.PdfHighlightArea
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +74,7 @@ fun PdfReaderWithTextSelectionScreen(
     pdfUri: Uri,
     fileName: String = "مستند PDF",
     initialPageIndex: Int = 0,
+    fullExtractedPdfText: String = "",
     onBack: () -> Unit = {},
     onCopyText: (String) -> Unit = {},
     onSaveProgress: (pageIndex: Int, totalPages: Int) -> Unit = { _, _ -> },
@@ -100,12 +103,21 @@ fun PdfReaderWithTextSelectionScreen(
     var scale by remember { mutableFloatStateOf(1f) }
     val listState = rememberLazyListState()
 
+    androidx.activity.compose.BackHandler {
+        onBack()
+    }
+
     // تحميل ملف الـ PDF بأمان
     LaunchedEffect(pdfUri) {
         withContext(Dispatchers.IO) {
             try {
                 var pfd = try {
-                    context.contentResolver.openFileDescriptor(pdfUri, "r")
+                    if (pdfUri.scheme == "file") {
+                        val file = File(pdfUri.path ?: "")
+                        if (file.exists()) ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY) else null
+                    } else {
+                        context.contentResolver.openFileDescriptor(pdfUri, "r")
+                    }
                 } catch (e: Exception) {
                     null
                 }
@@ -548,10 +560,19 @@ fun PdfReaderWithTextSelectionScreen(
                     contentPadding = PaddingValues(16.dp)
                 ) {
                     items(pageCount) { pageIndex ->
+                        val pageRealText = remember(fullExtractedPdfText, pageIndex, pageCount, fileName) {
+                            MultiFormatDocumentEngine.getPdfPageSelectableText(
+                                fullPdfText = fullExtractedPdfText,
+                                pageIndex = pageIndex,
+                                totalPages = pageCount,
+                                fileName = fileName
+                            )
+                        }
                         PdfPageViewItem(
                             renderer = renderer,
                             pageIndex = pageIndex,
                             scale = scale,
+                            pageText = pageRealText,
                             interactionMode = readerInteractionMode,
                             activeColor = activeHighlightColor,
                             highlights = highlights.filter { it.pageIndex == pageIndex },
@@ -605,6 +626,7 @@ private fun PdfPageViewItem(
     renderer: PdfRenderer,
     pageIndex: Int,
     scale: Float,
+    pageText: String,
     interactionMode: PdfInteractionMode,
     activeColor: Color,
     highlights: List<HighlightArea>,
@@ -615,23 +637,31 @@ private fun PdfPageViewItem(
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var selectionStart by remember { mutableStateOf<Offset?>(null) }
     var selectionEnd by remember { mutableStateOf<Offset?>(null) }
+    var showSelectablePageText by remember { mutableStateOf(true) }
 
-    // تصيير الصفحة إلى Bitmap في الخلفية
+    // تصيير الصفحة إلى Bitmap في الخلفية بأمان تام لمنع تعارض PdfRenderer.openPage
     LaunchedEffect(pageIndex, scale) {
         withContext(Dispatchers.IO) {
             try {
-                val page = synchronized(renderer) {
-                    renderer.openPage(pageIndex)
+                val renderedBmp = synchronized(renderer) {
+                    if (pageIndex !in 0 until renderer.pageCount) return@synchronized null
+                    val page = renderer.openPage(pageIndex)
+                    try {
+                        val width = (page.width * scale.coerceAtLeast(1f)).toInt().coerceAtLeast(1)
+                        val height = (page.height * scale.coerceAtLeast(1f)).toInt().coerceAtLeast(1)
+                        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        bmp.eraseColor(android.graphics.Color.WHITE)
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        bmp
+                    } finally {
+                        try {
+                            page.close()
+                        } catch (_: Exception) {}
+                    }
                 }
-                val width = (page.width * scale.coerceAtLeast(1f)).toInt().coerceAtLeast(1)
-                val height = (page.height * scale.coerceAtLeast(1f)).toInt().coerceAtLeast(1)
-
-                val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                synchronized(renderer) {
-                    page.close()
+                if (renderedBmp != null) {
+                    bitmap = renderedBmp
                 }
-                bitmap = bmp
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -675,6 +705,19 @@ private fun PdfPageViewItem(
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.secondary,
                             fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Surface(
+                        onClick = { showSelectablePageText = !showSelectablePageText },
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = if (showSelectablePageText) "🔼 إخفاء النص" else "🔤 تحديد نص الصفحة",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
@@ -723,7 +766,7 @@ private fun PdfPageViewItem(
                                                                     y = maxOf(start.y, end.y)
                                                                 )
                                                             )
-                                                            onTextSelected("النص المظلل من الصفحة ${pageIndex + 1}", rect)
+                                                            onTextSelected(pageText, rect)
                                                         }
                                                         selectionStart = null
                                                         selectionEnd = null
@@ -799,6 +842,40 @@ private fun PdfPageViewItem(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
+                }
+            }
+
+            if (showSelectablePageText) {
+                Surface(
+                    color = Color(0xFFF8FAFC),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "🔤 اضغط مطولاً لتحديد أي كلمة أو جملة ونسخها (صفحة ${pageIndex + 1}):",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        SelectionContainer {
+                            Text(
+                                text = pageText,
+                                fontSize = 12.sp,
+                                lineHeight = 19.sp,
+                                color = Color(0xFF1E293B),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White, RoundedCornerShape(8.dp))
+                                    .border(0.5.dp, Color(0xFFCBD5E1), RoundedCornerShape(8.dp))
+                                    .padding(10.dp)
+                            )
+                        }
                     }
                 }
             }

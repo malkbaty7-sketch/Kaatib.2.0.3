@@ -27,6 +27,10 @@ import androidx.compose.ui.window.Dialog
 import com.example.data.model.ExtractedText
 import com.example.ui.MainViewModel
 import java.text.SimpleDateFormat
+import android.net.Uri
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import com.example.util.SmartTextExtractionEngine
 import java.util.*
 
 @Composable
@@ -49,6 +53,8 @@ fun ExtractionScreen(
     var editingPassageIndex by remember { mutableStateOf<Int?>(null) }
     var editingPassageText by remember { mutableStateOf("") }
     var showArabicConverterDialog by remember { mutableStateOf(false) }
+    var showSmartExtractionStudio by remember { mutableStateOf(false) }
+    var smartStudioInitialTab by remember { mutableStateOf("AREA_FILTER") }
 
     LazyColumn(
         modifier = Modifier
@@ -56,6 +62,94 @@ fun ExtractionScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Smart Text Extraction & OCR Studio Banner (All 6 New Upgrades)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(theme.elevationDp, RoundedCornerShape(theme.cornerRadiusDp), spotColor = theme.shadowColor),
+                shape = RoundedCornerShape(theme.cornerRadiusDp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                smartStudioInitialTab = "AREA_FILTER"
+                                showSmartExtractionStudio = true
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF10B981)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.DocumentScanner, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                            }
+                            Column {
+                                Text(
+                                    text = "مختبر واستوديو استخراج النصوص والـ OCR الذكي (الجيل 6)",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "تحديد بالمنطقة • فلاتر ماسح • تنظيف العربية • جداول CSV • كيانات وتوثيق • استخراج دفعي",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
+                    }
+
+                    // Quick Launch Chips for each of the 6 Upgrades
+                    val upgradeActions = listOf(
+                        Triple("AREA_FILTER", "📐 تحديد بالمنطقة وOCR", Color(0xFF059669)),
+                        Triple("AREA_FILTER", "🔦 فلاتر تحسين الصفحات", Color(0xFF0284C7)),
+                        Triple("POST_PROCESS", "✨ مختبر تنظيف العربية", Color(0xFF7C3AED)),
+                        Triple("TABLES", "📊 استخراج الجداول CSV", Color(0xFFD97706)),
+                        Triple("ENTITIES", "🏷️ الكيانات والاقتباسات", Color(0xFF2563EB)),
+                        Triple("BATCH_PIPELINE", "📑 استخراج دفعي وتصدير فوري", Color(0xFFEC4899))
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(upgradeActions) { (tabId, label, badgeColor) ->
+                            Surface(
+                                onClick = {
+                                    smartStudioInitialTab = tabId
+                                    showSmartExtractionStudio = true
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                color = badgeColor.copy(alpha = 0.2f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Arabic Document Converter & Tashkeel Banner
         item {
             Card(
@@ -270,6 +364,70 @@ fun ExtractionScreen(
                             }
                         }
                     }
+
+                    // Inline Arabic Post-Processing & Smart Analysis Toolbar on Extracted Passages
+                    Divider(color = Color.Black.copy(alpha = 0.06f))
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        item {
+                            AssistChip(
+                                onClick = {
+                                    viewModel.transformAllExtractedPassages { SmartTextExtractionEngine.stripAllTashkeel(it) }
+                                    Toast.makeText(context, "تمت إزالة التشكيل من جميع الفقرات المستخلصة ✔", Toast.LENGTH_SHORT).show()
+                                },
+                                label = { Text("إزالة التشكيل", fontSize = 10.sp) }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = {
+                                    viewModel.transformAllExtractedPassages { SmartTextExtractionEngine.removeTatweel(it) }
+                                    Toast.makeText(context, "تمت إزالة التطويل (الكشيدة) ✔", Toast.LENGTH_SHORT).show()
+                                },
+                                label = { Text("حذف الكشيدة (ـ)", fontSize = 10.sp) }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = {
+                                    viewModel.transformAllExtractedPassages { SmartTextExtractionEngine.fixBrokenAndReversedArabicText(it) }
+                                    Toast.makeText(context, "تم إصلاح النص العربي المقطّع والمعكوس ✔", Toast.LENGTH_SHORT).show()
+                                },
+                                label = { Text("إصلاح النص المقطّع", fontSize = 10.sp) }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = {
+                                    viewModel.transformAllExtractedPassages { SmartTextExtractionEngine.normalizeHamzasAndAlef(it) }
+                                    Toast.makeText(context, "تم توحيد الهمزات (أ، إ، آ ← ا) ✔", Toast.LENGTH_SHORT).show()
+                                },
+                                label = { Text("توحيد الهمزات", fontSize = 10.sp) }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = {
+                                    viewModel.transformAllExtractedPassages { SmartTextExtractionEngine.convertToEasternArabicNumerals(it) }
+                                    Toast.makeText(context, "تم تحويل الأرقام إلى مشرقية (١٢٣) ✔", Toast.LENGTH_SHORT).show()
+                                },
+                                label = { Text("أرقام (١٢٣)", fontSize = 10.sp) }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = {
+                                    smartStudioInitialTab = "ENTITIES"
+                                    showSmartExtractionStudio = true
+                                },
+                                label = { Text("🏷️ استخراج الكيانات والجداول", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -437,6 +595,65 @@ fun ExtractionScreen(
         DocumentToolsAndConverterDialog(
             theme = theme,
             onDismiss = { showArabicConverterDialog = false }
+        )
+    }
+
+    if (showSmartExtractionStudio) {
+        val primaryFile = files.firstOrNull { selectedFileIds.contains(it.id) } ?: files.firstOrNull()
+        val initialUri = primaryFile?.filePath?.takeIf { it.startsWith("content://") || it.startsWith("file://") }?.let { Uri.parse(it) }
+        val initialText = if (passages.isNotEmpty()) {
+            passages.joinToString("\n\n")
+        } else {
+            primaryFile?.extractedText ?: ""
+        }
+        SmartTextExtractionStudioDialog(
+            theme = theme,
+            initialUri = initialUri,
+            initialFileName = primaryFile?.fileName ?: "مستند مستخلص",
+            initialExtractedText = initialText,
+            initialTab = smartStudioInitialTab,
+            onSendToEditor = { text, noteLabel ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = text,
+                    sourceFileName = primaryFile?.fileName ?: "استوديو الاستخراج الذكي",
+                    positionLabel = "مختبر الـ OCR",
+                    note = noteLabel
+                )
+            },
+            onAddFlashcards = { cards ->
+                val formatted = cards.joinToString("\n\n") { "🗂️ السؤال/المصطلح: ${it.termOrQuestion}\n💡 الإجابة: ${it.definitionOrAnswer}" }
+                if (formatted.isNotBlank()) {
+                    viewModel.insertQuoteIntoActiveChapter(
+                        quoteText = formatted,
+                        sourceFileName = primaryFile?.fileName ?: "استوديو الاستخراج الذكي",
+                        positionLabel = "بطاقات استذكار",
+                        note = "بطاقات استذكار مولدة تلقائياً"
+                    )
+                }
+            },
+            onAddMindMapNodes = { nodes ->
+                val formatted = nodes.joinToString("\n") { "🕸️ [${it.title}] ← ${it.subtitle}" }
+                if (formatted.isNotBlank()) {
+                    viewModel.insertQuoteIntoActiveChapter(
+                        quoteText = formatted,
+                        sourceFileName = primaryFile?.fileName ?: "استوديو الاستخراج الذكي",
+                        positionLabel = "خريطة ذهنية",
+                        note = "عقد خريطة ذهنية مستخرجة"
+                    )
+                }
+            },
+            onAddHighlightNote = { hl ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = hl.snippetText,
+                    sourceFileName = primaryFile?.fileName ?: "استوديو الاستخراج الذكي",
+                    positionLabel = hl.positionLabel,
+                    note = hl.note
+                )
+            },
+            onSaveExtractedRecord = { title, content ->
+                viewModel.saveCustomExtractedRecord(title, content)
+            },
+            onDismiss = { showSmartExtractionStudio = false }
         )
     }
 }

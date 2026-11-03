@@ -89,6 +89,7 @@ fun DocumentToolsAndConverterDialog(
     // DOCMO Integrated States
     var showDocmoWebStudioDialog by remember { mutableStateOf(false) }
     var docmoDiagnosticReport by remember { mutableStateOf<PdfDiagnosticReport?>(null) }
+    var showSmartExtractionStudio by remember { mutableStateOf(false) }
 
     val saveResultToDeviceLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")
@@ -391,19 +392,34 @@ fun DocumentToolsAndConverterDialog(
                 ) {
                     when (activeTab) {
                         "ARABIC_STUDIO" -> {
-                            // 1. Header description
+                            // 1. Header description + Launch Smart OCR Studio (6 Upgrades)
                             item {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = CardDefaults.cardColors(containerColor = theme.primaryColor.copy(alpha = 0.08f))
                                 ) {
-                                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(20.dp))
                                             Text("محوّل ومستخرج المستندات العربي المتقدم", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = theme.primaryColor)
                                         }
                                         Text("PDF · DOCX · TXT · صور (ممسوحة ضوئياً) مع الحفاظ التام على النص والتشكيل العربي (Harakat)", fontSize = 11.sp, color = Color.Gray)
+
+                                        Button(
+                                            onClick = { showSmartExtractionStudio = true },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                                        ) {
+                                            Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "فتح مختبر الاستخراج الذكي والـ OCR (تحديد بالمنطقة • جداول • كيانات)",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1387,6 +1403,42 @@ fun DocumentToolsAndConverterDialog(
         DocmoStudioWebViewDialog(
             theme = theme,
             onDismiss = { showDocmoWebStudioDialog = false }
+        )
+    }
+
+    if (showSmartExtractionStudio) {
+        SmartTextExtractionStudioDialog(
+            theme = theme,
+            initialUri = selectedUri,
+            initialFileName = selectedDocName,
+            initialExtractedText = arabicExtractedPreview,
+            onSendToEditor = { text, _ ->
+                arabicExtractedPreview = text
+                arabicProcessStatus = "تم تحديث مربع المعاينة بالنص المستخرج ✔"
+                resultMessage = arabicProcessStatus
+            },
+            onAddFlashcards = { cards ->
+                val formatted = cards.joinToString("\n\n") { "🗂️ ${it.termOrQuestion}\n💡 ${it.definitionOrAnswer}" }
+                if (formatted.isNotBlank()) {
+                    arabicExtractedPreview = formatted
+                    arabicProcessStatus = "تم توليد ${cards.size} بطاقات استذكار وعرضها في مربع المعاينة ✔"
+                    resultMessage = arabicProcessStatus
+                }
+            },
+            onAddMindMapNodes = { nodes ->
+                val formatted = nodes.joinToString("\n") { "🕸️ [${it.title}] ← ${it.subtitle}" }
+                if (formatted.isNotBlank()) {
+                    arabicExtractedPreview = formatted
+                    arabicProcessStatus = "تم توليد ${nodes.size} عقد خريطة ذهنية وعرضها في مربع المعاينة ✔"
+                    resultMessage = arabicProcessStatus
+                }
+            },
+            onAddHighlightNote = { hl ->
+                arabicExtractedPreview = hl.snippetText
+                arabicProcessStatus = "تم حفظ الملاحظة وعرضها في مربع المعاينة ✔"
+                resultMessage = arabicProcessStatus
+            },
+            onDismiss = { showSmartExtractionStudio = false }
         )
     }
 }

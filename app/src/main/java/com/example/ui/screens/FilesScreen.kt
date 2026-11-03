@@ -55,6 +55,12 @@ fun FilesScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
             viewModel.importFileFromUri(uri)
             Toast.makeText(context, "جاري استيراد واستخلاص الملف...", Toast.LENGTH_SHORT).show()
         }
@@ -147,8 +153,15 @@ fun FilesScreen(
                                 arrayOf(
                                     "application/pdf",
                                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    "application/msword",
+                                    "application/epub+zip",
+                                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    "text/csv",
+                                    "text/html",
+                                    "application/rtf",
                                     "text/plain",
-                                    "application/msword"
+                                    "*/*"
                                 )
                             )
                         },
@@ -520,13 +533,15 @@ fun FilePreviewDialog(
                         .padding(14.dp)
                 ) {
                     val scrollState = rememberScrollState()
-                    Text(
-                        text = if (file.extractedText.isNotBlank()) file.extractedText else "(لا يوجد نص مستخلص)",
-                        fontSize = 13.sp,
-                        lineHeight = 22.sp,
-                        color = Color(0xFF2B2B2B),
-                        modifier = Modifier.verticalScroll(scrollState)
-                    )
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            text = if (file.extractedText.isNotBlank()) file.extractedText else "(لا يوجد نص مستخلص)",
+                            fontSize = 13.sp,
+                            lineHeight = 22.sp,
+                            color = Color(0xFF2B2B2B),
+                            modifier = Modifier.verticalScroll(scrollState)
+                        )
+                    }
                 }
 
                 Row(

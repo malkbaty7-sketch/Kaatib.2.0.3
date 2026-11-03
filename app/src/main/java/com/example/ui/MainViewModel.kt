@@ -386,6 +386,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun saveCustomExtractedRecord(topicTitle: String, content: String) {
+        if (content.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val firstSelectedFileId = selectedFileIdsForExtraction.value.firstOrNull()
+            val record = ExtractedText(
+                fileId = firstSelectedFileId,
+                topicQuery = topicTitle.ifBlank { "استخراج ذكي متقدم" },
+                extractedContent = content
+            )
+            repository.insertExtractedText(record)
+            saveToastMessage.value = "تم حفظ النص المستخرج في سجل قاعدة البيانات بنجاح!"
+        }
+    }
+
+    fun transformAllExtractedPassages(transform: (String) -> String) {
+        val current = extractedPassages.value
+        if (current.isEmpty()) return
+        extractedPassages.value = current.map { transform(it) }
+    }
+
     // Projects & Editor Operations (Phase 3 & 4 & 5)
     fun createProject(
         title: String,

@@ -19,6 +19,7 @@ class TtsManager(context: Context) : TextToSpeech.OnInitListener {
     private val TAG = "TtsManager"
     private var tts: TextToSpeech? = null
     private var isInitialized = false
+    private var pendingPlay = false
 
     private val _playbackState = MutableStateFlow(TtsPlaybackState.STOPPED)
     val playbackState = _playbackState.asStateFlow()
@@ -47,6 +48,11 @@ class TtsManager(context: Context) : TextToSpeech.OnInitListener {
             tts?.setSpeechRate(_speechRate.value)
             setupListener()
             isInitialized = true
+            if (pendingPlay && sentences.isNotEmpty()) {
+                pendingPlay = false
+                _playbackState.value = TtsPlaybackState.PLAYING
+                speakCurrentSentence()
+            }
         } else {
             Log.e(TAG, "TTS initialization failed")
         }
@@ -91,17 +97,25 @@ class TtsManager(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun play() {
-        if (!isInitialized || sentences.isEmpty()) return
+        if (sentences.isEmpty()) return
+        if (!isInitialized) {
+            pendingPlay = true
+            _playbackState.value = TtsPlaybackState.PLAYING
+            return
+        }
+        pendingPlay = false
         _playbackState.value = TtsPlaybackState.PLAYING
         speakCurrentSentence()
     }
 
     fun pause() {
+        pendingPlay = false
         tts?.stop()
         _playbackState.value = TtsPlaybackState.PAUSED
     }
 
     fun stop() {
+        pendingPlay = false
         tts?.stop()
         _playbackState.value = TtsPlaybackState.STOPPED
         _currentSentenceIndex.value = 0
@@ -109,6 +123,7 @@ class TtsManager(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun seekForward() {
+        if (sentences.isEmpty()) return
         val next = (_currentSentenceIndex.value + 1).coerceAtMost(sentences.lastIndex)
         _currentSentenceIndex.value = next
         if (next in sentences.indices) {
@@ -120,6 +135,7 @@ class TtsManager(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun seekBackward() {
+        if (sentences.isEmpty()) return
         val prev = (_currentSentenceIndex.value - 1).coerceAtLeast(0)
         _currentSentenceIndex.value = prev
         if (prev in sentences.indices) {

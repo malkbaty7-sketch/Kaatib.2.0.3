@@ -21,34 +21,55 @@ data class ParsedDocumentResult(
 object DocumentParser {
 
     fun parseUri(context: Context, uri: Uri): ParsedDocumentResult {
-        var fileName = "document_${System.currentTimeMillis()}"
-        var fileSize = 0L
+        val (resolvedName, resolvedSize) = MultiFormatDocumentEngine.getFileNameAndSize(context, uri)
+        val fileName = resolvedName.ifBlank { "document_${System.currentTimeMillis()}.txt" }
+        val fileSize = resolvedSize
+        val ext = MultiFormatDocumentEngine.getFileExtension(fileName).lowercase()
 
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                if (nameIndex != -1) {
-                    fileName = cursor.getString(nameIndex) ?: fileName
-                }
-                if (sizeIndex != -1) {
-                    fileSize = cursor.getLong(sizeIndex)
-                }
-            }
-        }
-
-        val fileType = when {
-            fileName.endsWith(".docx", ignoreCase = true) -> "DOCX"
-            fileName.endsWith(".pdf", ignoreCase = true) -> "PDF"
-            fileName.endsWith(".doc", ignoreCase = true) -> "DOC"
+        val fileType = when (ext) {
+            "docx" -> "DOCX"
+            "pdf" -> "PDF"
+            "doc" -> "DOC"
+            "epub" -> "EPUB"
+            "pptx", "ppt" -> "PPTX"
+            "xlsx", "xls" -> "XLSX"
+            "csv", "tsv" -> "CSV"
+            "html", "htm" -> "HTML"
+            "rtf" -> "RTF"
+            "md" -> "MD"
             else -> "TXT"
         }
 
         val extractedText = try {
             when (fileType) {
-                "DOCX" -> extractDocxText(context.contentResolver.openInputStream(uri))
-                "PDF" -> extractPdfTextFallback(context.contentResolver.openInputStream(uri), fileName)
-                else -> readPlainText(context.contentResolver.openInputStream(uri))
+                "DOCX" -> {
+                    val text = DocxExtractor.extractFullText(context, uri)
+                    if (text.isNotBlank()) text else extractDocxText(MultiFormatDocumentEngine.openUriInputStream(context, uri))
+                }
+                "PDF" -> extractPdfTextFallback(MultiFormatDocumentEngine.openUriInputStream(context, uri), fileName)
+                "EPUB" -> {
+                    val book = MultiFormatDocumentEngine.parseEpub(context, uri)
+                    book.chapters.joinToString("\n\n") { "${it.title}\n${it.textContent}" }
+                }
+                "PPTX" -> {
+                    val pres = MultiFormatDocumentEngine.parsePptx(context, uri)
+                    pres.slides.joinToString("\n\n") { "شريحة ${it.slideNumber} - ${it.title}:\n${it.textContent}" }
+                }
+                "XLSX", "CSV" -> {
+                    val sheet = MultiFormatDocumentEngine.parseSpreadsheet(context, uri, ext)
+                    buildString {
+                        if (sheet.headers.isNotEmpty()) {
+                            appendLine(sheet.headers.joinToString(" | "))
+                        }
+                        sheet.rows.forEach { row ->
+                            appendLine(row.joinToString(" | "))
+                        }
+                    }.trim()
+                }
+                "HTML", "RTF", "MD", "TXT" -> {
+                    MultiFormatDocumentEngine.parseTextDocument(context, uri, ext)
+                }
+                else -> readPlainText(MultiFormatDocumentEngine.openUriInputStream(context, uri))
             }
         } catch (e: Exception) {
             "تم استيراد الملف: $fileName\n\n(تعذر قراءة المحتوى بالكامل أو أن الملف محمي أو مشفر. يمكنك تعديل النص أو إضافة الملاحظات يدوياً هنا)."

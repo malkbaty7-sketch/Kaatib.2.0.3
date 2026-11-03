@@ -273,6 +273,7 @@ data class ScannedDocumentItem(
 
 object MultiFormatDocumentEngine {
     private val pdfCoverCache = object : android.util.LruCache<String, Bitmap>(24) {}
+    private val pdfPageCache = object : android.util.LruCache<String, Bitmap>(18) {}
 
     fun detectCategory(extension: String): DocumentCategory {
         return when (extension.lowercase()) {
@@ -288,6 +289,14 @@ object MultiFormatDocumentEngine {
         var name = "document_${System.currentTimeMillis()}"
         var size = 0L
         try {
+            if (uri.scheme == "file") {
+                val file = File(uri.path ?: "")
+                if (file.exists()) {
+                    name = file.name
+                    size = file.length()
+                    return Pair(name, size)
+                }
+            }
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -308,6 +317,19 @@ object MultiFormatDocumentEngine {
             }
         }
         return Pair(name, size)
+    }
+
+    fun openUriInputStream(context: Context, uri: Uri): InputStream? {
+        return try {
+            if (uri.scheme == "file") {
+                val file = File(uri.path ?: "")
+                if (file.exists()) FileInputStream(file) else context.contentResolver.openInputStream(uri)
+            } else {
+                context.contentResolver.openInputStream(uri)
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun getFileExtension(fileName: String): String {
@@ -334,6 +356,10 @@ object MultiFormatDocumentEngine {
     }
 
     fun renderPdfPage(context: Context, uri: Uri, pageIndex: Int, scaleFactor: Float = 1.5f): Bitmap? {
+        val cacheKey = "${uri}_${pageIndex}_${String.format(java.util.Locale.US, "%.2f", scaleFactor)}"
+        val cached = pdfPageCache.get(cacheKey)
+        if (cached != null && !cached.isRecycled) return cached
+
         var pfd: ParcelFileDescriptor? = null
         var renderer: PdfRenderer? = null
         var page: PdfRenderer.Page? = null
@@ -350,6 +376,7 @@ object MultiFormatDocumentEngine {
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             bitmap.eraseColor(Color.WHITE)
             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            pdfPageCache.put(cacheKey, bitmap)
             bitmap
         } catch (e: Exception) {
             null
@@ -358,6 +385,39 @@ object MultiFormatDocumentEngine {
             try { renderer?.close() } catch (_: Exception) {}
             try { pfd?.close() } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * Extracts or slices the selectable text corresponding to a specific PDF page index
+     * so the user can long-press and select/copy specific words or sentences on any page.
+     */
+    fun getPdfPageSelectableText(
+        fullPdfText: String,
+        pageIndex: Int,
+        totalPages: Int,
+        fileName: String
+    ): String {
+        val cleanFull = fullPdfText.trim()
+        if (cleanFull.isBlank()) {
+            return "نص الصفحة ${pageIndex + 1} من مستند $fileName.\nاضغط مطولاً على أي كلمة أو جملة هنا لتحديدها ونسخها أو إرسالها كاقتباس مباشر إلى شاشة الكتابة."
+        }
+        // Check if text contains explicit form-feed (\u000C) page breaks
+        if (cleanFull.contains('\u000C')) {
+            val pages = cleanFull.split('\u000C').map { it.trim() }.filter { it.isNotBlank() }
+            if (pageIndex in pages.indices) {
+                return pages[pageIndex]
+            }
+        }
+        // Distribute paragraphs/lines proportionally across totalPages
+        val paragraphs = cleanFull.split(Regex("\\n+")).map { it.trim() }.filter { it.isNotBlank() }
+        if (paragraphs.isEmpty()) return cleanFull
+        val safeTotal = totalPages.coerceAtLeast(1)
+        if (safeTotal == 1 || paragraphs.size <= 2) return cleanFull
+
+        val chunkSize = kotlin.math.ceil(paragraphs.size.toDouble() / safeTotal.toDouble()).toInt().coerceAtLeast(1)
+        val startIdx = (pageIndex * chunkSize).coerceIn(0, (paragraphs.size - 1).coerceAtLeast(0))
+        val endIdx = ((pageIndex + 1) * chunkSize).coerceIn(startIdx + 1, paragraphs.size)
+        return paragraphs.subList(startIdx, endIdx).joinToString("\n\n")
     }
 
     fun getOrRenderPdfCoverThumbnail(context: Context, uriString: String): Bitmap? {
@@ -450,7 +510,7 @@ object MultiFormatDocumentEngine {
         val chapters = mutableListOf<EpubChapter>()
 
         try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return fallbackEpub()
+            val inputStream = openUriInputStream(context, uri) ?: return fallbackEpub()
             val tempZipFile = File.createTempFile("temp_epub", ".epub", context.cacheDir)
             tempZipFile.outputStream().use { out -> inputStream.copyTo(out) }
 
@@ -608,7 +668,7 @@ object MultiFormatDocumentEngine {
                 val extracted = DocxExtractor.extractFullText(context, uri)
                 if (extracted.isNotBlank()) return extracted
             }
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return ""
+            val inputStream = openUriInputStream(context, uri) ?: return ""
             when (extension.lowercase()) {
                 "docx" -> {
                     val text = DocxExtractor.extractFullText(inputStream)
@@ -666,7 +726,7 @@ object MultiFormatDocumentEngine {
     private fun parseCsv(context: Context, uri: Uri, isTsv: Boolean = false): SpreadsheetContent {
         val rows = mutableListOf<List<String>>()
         try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return emptySpreadsheet()
+            val inputStream = openUriInputStream(context, uri) ?: return emptySpreadsheet()
             val lines = inputStream.bufferedReader(Charsets.UTF_8).useLines { it.toList() }
             val delimiter = if (isTsv) '\t' else ','
 
@@ -713,7 +773,7 @@ object MultiFormatDocumentEngine {
         val rows = mutableListOf<List<String>>()
         var sheetName = "Sheet 1"
         try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return emptySpreadsheet()
+            val inputStream = openUriInputStream(context, uri) ?: return emptySpreadsheet()
             val tempZipFile = File.createTempFile("temp_xlsx", ".xlsx", context.cacheDir)
             tempZipFile.outputStream().use { out -> inputStream.copyTo(out) }
 
@@ -845,7 +905,7 @@ object MultiFormatDocumentEngine {
             val (name, _) = getFileNameAndSize(context, uri)
             presentationTitle = name.substringBeforeLast(".")
 
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return fallbackPptx(presentationTitle)
+            val inputStream = openUriInputStream(context, uri) ?: return fallbackPptx(presentationTitle)
             val tempZipFile = File.createTempFile("temp_pptx", ".pptx", context.cacheDir)
             tempZipFile.outputStream().use { out -> inputStream.copyTo(out) }
 
