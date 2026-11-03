@@ -17,10 +17,23 @@ data class AppThemeData(
     val backgroundColors: List<Color>,
     val shadowColor: Color,
     val elevationDp: Dp,
-    val cornerRadiusDp: Dp
+    val cornerRadiusDp: Dp,
+    val isDark: Boolean = false
 ) {
     val backgroundBrush: Brush
         get() = Brush.linearGradient(backgroundColors)
+
+    val cardColor: Color
+        get() = if (isDark) Color(0xFF1E293B) else surfaceColor
+
+    val elevatedCardColor: Color
+        get() = if (isDark) Color(0xFF263449) else Color.White
+
+    val subtleTextColor: Color
+        get() = textColor.copy(alpha = if (isDark) 0.72f else 0.68f)
+
+    val borderColor: Color
+        get() = primaryColor.copy(alpha = if (isDark) 0.28f else 0.16f)
 }
 
 val defaultAppThemes = listOf(
@@ -34,31 +47,60 @@ val defaultAppThemes = listOf(
         backgroundColors = listOf(Color(0xFFFFF5E1), Color(0xFFFFE4B5), Color(0xFFFFDAB9)),
         shadowColor = Color(0x338B4513),
         elevationDp = 8.dp,
-        cornerRadiusDp = 16.dp
+        cornerRadiusDp = 16.dp,
+        isDark = false
     ),
     AppThemeData(
         id = "naturalCalm",
         name = "الهدوء الطبيعي",
-        primaryColor = Color(0xFF388E3C),
-        secondaryColor = Color(0xFF8BC34A),
+        primaryColor = Color(0xFF2E7D32),
+        secondaryColor = Color(0xFF66BB6A),
         textColor = Color(0xFF1B5E20),
         surfaceColor = Color(0xFFF7FCF7),
         backgroundColors = listOf(Color(0xFFF0FFF4), Color(0xFFE8F5E9)),
         shadowColor = Color(0x332E7D32),
         elevationDp = 10.dp,
-        cornerRadiusDp = 20.dp
+        cornerRadiusDp = 18.dp,
+        isDark = false
     ),
     AppThemeData(
         id = "calmSky",
         name = "السماء الهادئة",
-        primaryColor = Color(0xFF1976D2),
-        secondaryColor = Color(0xFF64B5F6),
-        textColor = Color(0xFF0D47A1),
+        primaryColor = Color(0xFF1565C0),
+        secondaryColor = Color(0xFF42A5F5),
+        textColor = Color(0xFF0D3B66),
         surfaceColor = Color(0xFFF5F9FD),
         backgroundColors = listOf(Color(0xFFE3F2FD), Color(0xFFBBDEFB)),
         shadowColor = Color(0x331565C0),
-        elevationDp = 12.dp,
-        cornerRadiusDp = 18.dp
+        elevationDp = 10.dp,
+        cornerRadiusDp = 18.dp,
+        isDark = false
+    ),
+    AppThemeData(
+        id = "sepiaParchment",
+        name = "الرقّ العربي الكلاسيكي (Sepia)",
+        primaryColor = Color(0xFF8D4E2A),
+        secondaryColor = Color(0xFFC88A55),
+        textColor = Color(0xFF2C1D11),
+        surfaceColor = Color(0xFFF8F1E5),
+        backgroundColors = listOf(Color(0xFFF4ECD8), Color(0xFFEADBC0)),
+        shadowColor = Color(0x335D4037),
+        elevationDp = 8.dp,
+        cornerRadiusDp = 16.dp,
+        isDark = false
+    ),
+    AppThemeData(
+        id = "royalNight",
+        name = "الليل الملكي المريح للعين (Dark)",
+        primaryColor = Color(0xFF38BDF8),
+        secondaryColor = Color(0xFF818CF8),
+        textColor = Color(0xFFF1F5F9),
+        surfaceColor = Color(0xFF0F172A),
+        backgroundColors = listOf(Color(0xFF0B1120), Color(0xFF1E293B)),
+        shadowColor = Color(0x66000000),
+        elevationDp = 10.dp,
+        cornerRadiusDp = 18.dp,
+        isDark = true
     )
 )
 

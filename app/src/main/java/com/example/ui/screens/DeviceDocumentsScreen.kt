@@ -516,8 +516,8 @@ fun DeviceDocumentsScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color.White,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    color = theme.elevatedCardColor,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.borderColor),
                     modifier = Modifier.weight(1f).height(34.dp)
                 ) {
                     Row(
@@ -536,14 +536,14 @@ fun DeviceDocumentsScreen(
                             modifier = Modifier.weight(1f),
                             decorationBox = { innerTextField ->
                                 if (searchQuery.isEmpty()) {
-                                    Text("بحث سريع عن ملف أو كتاب...", fontSize = 11.sp, color = Color.Gray)
+                                    Text("بحث سريع عن ملف أو كتاب...", fontSize = 11.sp, color = theme.subtleTextColor)
                                 }
                                 innerTextField()
                             }
                         )
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(22.dp)) {
-                                Icon(Icons.Default.Clear, contentDescription = "مسح البحث", tint = Color.Gray, modifier = Modifier.size(13.dp))
+                                Icon(Icons.Default.Clear, contentDescription = "مسح البحث", tint = theme.subtleTextColor, modifier = Modifier.size(13.dp))
                             }
                         }
                     }
@@ -553,8 +553,8 @@ fun DeviceDocumentsScreen(
                 Surface(
                     onClick = { showNewFolderDialog = true },
                     shape = RoundedCornerShape(8.dp),
-                    color = theme.primaryColor.copy(alpha = 0.08f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.3f)),
+                    color = theme.primaryColor.copy(alpha = 0.1f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.35f)),
                     modifier = Modifier.height(34.dp)
                 ) {
                     Row(
@@ -580,8 +580,8 @@ fun DeviceDocumentsScreen(
                     Surface(
                         onClick = { selectedFolder = folder },
                         shape = RoundedCornerShape(8.dp),
-                        color = if (isSelected) Color(0xFF1E293B) else Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) Color(0xFF1E293B) else Color(0xFFE2E8F0)),
+                        color = if (isSelected) theme.primaryColor else theme.elevatedCardColor,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) theme.primaryColor else theme.borderColor),
                         modifier = Modifier.height(26.dp)
                     ) {
                         Row(
@@ -590,9 +590,9 @@ fun DeviceDocumentsScreen(
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Icon(
-                                if (folder == "المفضلة") Icons.Default.Star else Icons.Default.Folder,
+                                if (folder == "المفضلة") Icons.Default.Star else if (folder == "الخزنة") Icons.Default.Lock else Icons.Default.Folder,
                                 contentDescription = null,
-                                tint = if (isSelected) Color(0xFFFBBF24) else Color.Gray,
+                                tint = if (isSelected) Color(0xFFFBBF24) else theme.subtleTextColor,
                                 modifier = Modifier.size(11.dp)
                             )
                             Text(
@@ -618,8 +618,8 @@ fun DeviceDocumentsScreen(
                     Surface(
                         onClick = { selectedCategory = cat },
                         shape = RoundedCornerShape(8.dp),
-                        color = if (isSelected) theme.primaryColor else Color.White,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) theme.primaryColor else Color(0xFFE2E8F0)),
+                        color = if (isSelected) theme.primaryColor else theme.elevatedCardColor,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) theme.primaryColor else theme.borderColor),
                         modifier = Modifier.height(26.dp)
                     ) {
                         Row(
@@ -694,8 +694,8 @@ fun DeviceDocumentsScreen(
             if (recentReadList.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color.White,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.2f)),
+                    color = theme.elevatedCardColor,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.25f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -777,7 +777,7 @@ fun DeviceDocumentsScreen(
                                                 text = prog.fileName,
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF1E293B),
+                                                color = theme.textColor,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -1099,10 +1099,10 @@ private fun DocumentItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
-            .shadow(2.dp, RoundedCornerShape(16.dp), spotColor = Color(0x1A000000)),
+            .border(1.dp, theme.borderColor, RoundedCornerShape(16.dp))
+            .shadow(2.dp, RoundedCornerShape(16.dp), spotColor = theme.shadowColor),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -1156,7 +1156,7 @@ private fun DocumentItemCard(
                         text = document.name,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = Color(0xFF1E293B),
+                        color = theme.textColor,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1169,20 +1169,20 @@ private fun DocumentItemCard(
                         if (document.folderName != "الرئيسي") {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFF1F5F9)
+                                color = theme.cardColor
                             ) {
                                 Text(
                                     text = "📁 ${document.folderName}",
                                     fontSize = 9.sp,
-                                    color = Color(0xFF475569),
+                                    color = theme.subtleTextColor,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                 )
                             }
-                            Text("•", fontSize = 10.sp, color = Color(0xFFCBD5E1))
+                            Text("•", fontSize = 10.sp, color = theme.borderColor)
                         }
-                        Text(sizeFormatted, fontSize = 10.sp, color = Color(0xFF64748B))
-                        Text("•", fontSize = 10.sp, color = Color(0xFFCBD5E1))
-                        Text(dateFormatted, fontSize = 10.sp, color = Color(0xFF64748B))
+                        Text(sizeFormatted, fontSize = 10.sp, color = theme.subtleTextColor)
+                        Text("•", fontSize = 10.sp, color = theme.borderColor)
+                        Text(dateFormatted, fontSize = 10.sp, color = theme.subtleTextColor)
                     }
 
                     if (document.tags.isNotEmpty()) {
@@ -1383,10 +1383,10 @@ private fun DocumentGridItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
-            .shadow(2.dp, RoundedCornerShape(16.dp), spotColor = Color(0x1A000000)),
+            .border(1.dp, theme.borderColor, RoundedCornerShape(16.dp))
+            .shadow(4.dp, RoundedCornerShape(16.dp), spotColor = theme.shadowColor),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
     ) {
         Column(
             modifier = Modifier.padding(10.dp),
@@ -1399,7 +1399,7 @@ private fun DocumentGridItemCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = badgeColor.copy(alpha = 0.12f)
+                    color = badgeColor.copy(alpha = 0.14f)
                 ) {
                     Text(
                         text = ext,
@@ -1413,30 +1413,32 @@ private fun DocumentGridItemCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = onToggleFavorite,
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             imageVector = if (document.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = "المفضلة",
-                            tint = if (document.isFavorite) Color(0xFFF59E0B) else Color.Gray,
+                            tint = if (document.isFavorite) Color(0xFFF59E0B) else theme.subtleTextColor,
                             modifier = Modifier.size(16.dp)
                         )
                     }
                     IconButton(
                         onClick = onOpenOptions,
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "خيارات", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.MoreVert, contentDescription = "خيارات", tint = theme.subtleTextColor, modifier = Modifier.size(16.dp))
                     }
                 }
             }
 
+            // Book Cover Preview with Circular Progress Ring Overlay
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(82.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(badgeColor.copy(alpha = 0.06f)),
+                    .height(104.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(badgeColor.copy(alpha = 0.08f))
+                    .border(0.5.dp, badgeColor.copy(alpha = 0.25f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (pdfCoverBitmap != null) {
@@ -1447,7 +1449,36 @@ private fun DocumentGridItemCard(
                         contentScale = ContentScale.Crop
                     )
                 } else {
-                    Icon(iconVector, contentDescription = null, tint = badgeColor, modifier = Modifier.size(36.dp))
+                    Icon(iconVector, contentDescription = null, tint = badgeColor, modifier = Modifier.size(40.dp))
+                }
+
+                // Circular Progress Ring Badge on Cover Corner
+                if (progress != null && progress.totalProgressPercentage > 0f) {
+                    val pct = (progress.totalProgressPercentage * 100).toInt().coerceIn(1, 100)
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFF0F172A).copy(alpha = 0.85f),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(6.dp)
+                            .size(34.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                progress = { progress.totalProgressPercentage },
+                                modifier = Modifier.size(30.dp),
+                                strokeWidth = 2.5.dp,
+                                color = Color(0xFF34D399),
+                                trackColor = Color.White.copy(alpha = 0.2f)
+                            )
+                            Text(
+                                text = "$pct%",
+                                fontSize = 7.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1455,7 +1486,7 @@ private fun DocumentGridItemCard(
                 text = document.name,
                 fontWeight = FontWeight.Bold,
                 fontSize = 11.sp,
-                color = Color(0xFF1E293B),
+                color = theme.textColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = 15.sp
@@ -1466,7 +1497,7 @@ private fun DocumentGridItemCard(
                     items(document.tags.take(2)) { tag ->
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFFF0FDFA)
+                            color = Color(0xFF0F766E).copy(alpha = 0.12f)
                         ) {
                             Text(
                                 text = "#$tag",
@@ -1484,23 +1515,20 @@ private fun DocumentGridItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(sizeFormatted, fontSize = 9.sp, color = Color.Gray)
+                Text(sizeFormatted, fontSize = 9.sp, color = theme.subtleTextColor)
                 if (document.folderName != "الرئيسي") {
-                    Text("📁 ${document.folderName}", fontSize = 8.sp, color = Color(0xFF475569))
+                    Text("📁 ${document.folderName}", fontSize = 8.sp, color = theme.primaryColor)
                 }
             }
 
-            if (progress != null && progress.totalProgressPercentage > 0f) {
-                LinearProgressIndicator(
-                    progress = { progress.totalProgressPercentage },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = theme.primaryColor,
-                    trackColor = Color(0xFFE2E8F0)
-                )
-            }
+            // Subtle Bookshelf Ledge Bar at Bottom of Grid Card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(badgeColor.copy(alpha = 0.45f))
+            )
         }
     }
 }

@@ -10,6 +10,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -884,88 +886,28 @@ fun MultiFormatDocumentViewerScreen(
                                 }
                             }
 
+                            var showViewAndAudioMenu by remember { mutableStateOf(false) }
+                            var showAnnotateAndExtractMenu by remember { mutableStateOf(false) }
+                            var showSaveAndVaultMenu by remember { mutableStateOf(false) }
+
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(1.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                // 1. Add Highlight / Quote / Send to Editor button
+                                // Direct Quick Action 1: Search in Document
                                 IconButton(
-                                    onClick = {
-                                        val sampleSnippet = when (extension) {
-                                            "pdf" -> {
-                                                val lines = pdfExtractedFullText.lines().filter { it.isNotBlank() }
-                                                lines.drop((pdfCurrentPage * 4).coerceAtMost((lines.size - 1).coerceAtLeast(0)))
-                                                    .take(4)
-                                                    .joinToString(" ")
-                                                    .ifBlank { "اقتباس من $fileName (صفحة ${pdfCurrentPage + 1})" }
-                                            }
-                                            "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.textContent?.take(220) ?: ""
-                                            "pptx", "ppt" -> pptxPresentation?.slides?.getOrNull(pptxCurrentSlideIndex)?.textContent?.take(220) ?: ""
-                                            else -> textDocumentContent.take(220)
-                                        }
-                                        activeQuoteDraft = sampleSnippet.ifBlank { "اقتباس مرجعي من $fileName" }
-                                        activeQuoteNote = ""
-                                    },
-                                    modifier = Modifier.size(26.dp)
+                                    onClick = { isSearchActive = !isSearchActive },
+                                    modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
-                                        Icons.Default.FormatQuote,
-                                        contentDescription = "تظليل واقتباس للمحرر",
-                                        tint = Color(0xFFD97706),
-                                        modifier = Modifier.size(15.dp)
+                                        Icons.Default.Search,
+                                        contentDescription = "بحث في المستند",
+                                        tint = if (isSearchActive) theme.primaryColor else readerTheme.text,
+                                        modifier = Modifier.size(17.dp)
                                     )
                                 }
 
-                                // 2. Smart Voice Reader (TTS)
-                                IconButton(
-                                    onClick = {
-                                        if (showTtsBar && ttsPlaybackState == TtsPlaybackState.PLAYING) {
-                                            ttsManager.pause()
-                                        } else {
-                                            val textToRead = currentReadableText.ifBlank {
-                                                "مستند $fileName، $currentPositionLabel"
-                                            }
-                                            ttsManager.prepareText(textToRead)
-                                            ttsManager.play()
-                                            showTtsBar = true
-                                        }
-                                    },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.RecordVoiceOver,
-                                        contentDescription = "القارئ الصوتي الذكي",
-                                        tint = if (showTtsBar) Color(0xFF16A34A) else readerTheme.text,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-
-                                // 3. Auto-Scroll toggle
-                                IconButton(
-                                    onClick = {
-                                        if (!isAutoScrollActive) {
-                                            isAutoScrollActive = true
-                                            autoScrollSpeed = 1
-                                            Toast.makeText(context, "تم تفعيل التمرير التلقائي (السرعة 1x) ✨", Toast.LENGTH_SHORT).show()
-                                        } else if (autoScrollSpeed < 3) {
-                                            autoScrollSpeed++
-                                            Toast.makeText(context, "سرعة التمرير التلقائي: ${autoScrollSpeed}x", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            isAutoScrollActive = false
-                                            Toast.makeText(context, "تم إيقاف التمرير التلقائي", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.SwipeVertical,
-                                        contentDescription = "التمرير التلقائي",
-                                        tint = if (isAutoScrollActive) theme.primaryColor else readerTheme.text,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-
-                                // 4. Bookmark toggle button
+                                // Direct Quick Action 2: Bookmark Toggle
                                 IconButton(
                                     onClick = {
                                         val currentIdx = currentPositionIndex
@@ -973,135 +915,298 @@ fun MultiFormatDocumentViewerScreen(
                                             bookmarks.filter { it.positionIndex != currentIdx }
                                         } else {
                                             bookmarks + DocumentBookmarkItem(
-                                                uriString = uriString,
+                                                uriString = effectiveUriString,
                                                 label = currentPositionLabel,
                                                 positionIndex = currentIdx
                                             )
                                         }
                                         bookmarks = updated
-                                        MultiFormatDocumentEngine.saveDocumentBookmarks(context, uriString, updated)
+                                        MultiFormatDocumentEngine.saveDocumentBookmarks(context, effectiveUriString, updated)
                                         Toast.makeText(
                                             context,
                                             if (isCurrentPositionBookmarked) "تمت إزالة العلامة المرجعية" else "تمت إضافة علامة مرجعية 🔖",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     },
-                                    modifier = Modifier.size(26.dp)
+                                    modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
                                         imageVector = if (isCurrentPositionBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                                         contentDescription = "علامة مرجعية",
                                         tint = if (isCurrentPositionBookmarked) Color(0xFFF59E0B) else readerTheme.text,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(17.dp)
                                     )
                                 }
 
-                                // 5. Notebook (Highlights + Notes + Bookmarks) Sheet
-                                IconButton(
-                                    onClick = { showBookmarksSheet = true },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Bookmarks,
-                                        contentDescription = "دفتر الملاحظات والاقتباسات",
-                                        tint = if (highlights.isNotEmpty() || bookmarks.isNotEmpty()) theme.primaryColor else readerTheme.text,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-
-                                // 6. Search in Document
-                                IconButton(
-                                    onClick = { isSearchActive = !isSearchActive },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Search,
-                                        contentDescription = "بحث في المستند",
-                                        tint = if (isSearchActive) theme.primaryColor else readerTheme.text,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-
-                                // 7. Auto Outline / Table of Contents (TOC)
-                                if (documentOutline.isNotEmpty()) {
-                                    IconButton(
-                                        onClick = { showOutlineSheet = true },
-                                        modifier = Modifier.size(26.dp)
+                                // Smart Group 1: View & Audio Menu (أدوات العرض والقراءة الصوتية)
+                                Box {
+                                    Surface(
+                                        onClick = { showViewAndAudioMenu = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (showTtsBar || isAutoScrollActive) Color(0xFF16A34A).copy(alpha = 0.18f) else theme.primaryColor.copy(alpha = 0.12f)
                                     ) {
-                                        Icon(
-                                            Icons.Default.Toc,
-                                            contentDescription = "فهرس المحتويات والعناوين",
-                                            tint = readerTheme.text,
-                                            modifier = Modifier.size(15.dp)
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Tune,
+                                                contentDescription = "أدوات العرض والقراءة",
+                                                tint = if (showTtsBar || isAutoScrollActive) Color(0xFF16A34A) else theme.primaryColor,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = "العرض",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (showTtsBar || isAutoScrollActive) Color(0xFF16A34A) else theme.primaryColor
+                                            )
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showViewAndAudioMenu,
+                                        onDismissRequest = { showViewAndAudioMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text(if (showTtsBar && ttsPlaybackState == TtsPlaybackState.PLAYING) "إيقاف القارئ الصوتي مؤقتاً ⏸️" else "تشغيل القارئ الصوتي الذكي 🎧", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.RecordVoiceOver, contentDescription = null, tint = Color(0xFF16A34A)) },
+                                            onClick = {
+                                                showViewAndAudioMenu = false
+                                                if (showTtsBar && ttsPlaybackState == TtsPlaybackState.PLAYING) {
+                                                    ttsManager.pause()
+                                                } else {
+                                                    val textToRead = currentReadableText.ifBlank {
+                                                        "مستند $effectiveFileName، $currentPositionLabel"
+                                                    }
+                                                    ttsManager.prepareText(textToRead)
+                                                    ttsManager.play()
+                                                    showTtsBar = true
+                                                }
+                                            }
+                                        )
+                                        if (extension in listOf("pdf", "epub", "pptx", "ppt")) {
+                                            DropdownMenuItem(
+                                                text = { Text(if (isContinuousBrowserScrollMode) "التبديل لوضع صفحة مستقلة 📄" else "تفعيل التمرير السلس كالمتصفح 📜", fontSize = 12.sp) },
+                                                leadingIcon = { Icon(Icons.Default.ViewStream, contentDescription = null, tint = Color(0xFF0284C7)) },
+                                                onClick = {
+                                                    showViewAndAudioMenu = false
+                                                    isContinuousBrowserScrollMode = !isContinuousBrowserScrollMode
+                                                }
+                                            )
+                                        }
+                                        DropdownMenuItem(
+                                            text = { Text(if (isAutoScrollActive) "تغيير سرعة / إيقاف التمرير التلقائي (${autoScrollSpeed}x)" else "تفعيل التمرير التلقائي السلس ✨", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.SwipeVertical, contentDescription = null, tint = theme.primaryColor) },
+                                            onClick = {
+                                                showViewAndAudioMenu = false
+                                                if (!isAutoScrollActive) {
+                                                    isAutoScrollActive = true
+                                                    autoScrollSpeed = 1
+                                                    Toast.makeText(context, "تم تفعيل التمرير التلقائي (السرعة 1x) ✨", Toast.LENGTH_SHORT).show()
+                                                } else if (autoScrollSpeed < 3) {
+                                                    autoScrollSpeed++
+                                                    Toast.makeText(context, "سرعة التمرير التلقائي: ${autoScrollSpeed}x", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    isAutoScrollActive = false
+                                                    Toast.makeText(context, "تم إيقاف التمرير التلقائي", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        )
+                                        if (documentOutline.isNotEmpty()) {
+                                            DropdownMenuItem(
+                                                text = { Text("فهرس المحتويات والعناوين 📑", fontSize = 12.sp) },
+                                                leadingIcon = { Icon(Icons.Default.Toc, contentDescription = null, tint = theme.primaryColor) },
+                                                onClick = {
+                                                    showViewAndAudioMenu = false
+                                                    showOutlineSheet = true
+                                                }
+                                            )
+                                        }
+                                        DropdownMenuItem(
+                                            text = { Text("وضع ملء الشاشة الغامر 🔲", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.Fullscreen, contentDescription = null, tint = theme.primaryColor) },
+                                            onClick = {
+                                                showViewAndAudioMenu = false
+                                                isImmersiveFullscreen = true
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("إعدادات القراءة والخطوط والثيم 🎨", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null, tint = theme.primaryColor) },
+                                            onClick = {
+                                                showViewAndAudioMenu = false
+                                                showSettingsSheet = true
+                                            }
                                         )
                                     }
                                 }
 
-                                // 8. PDF Specific Actions (Selection mode / Page Range Extract)
-                                if (extension == "pdf") {
-                                    IconButton(
-                                        onClick = { isPdfContinuousSelectionView = !isPdfContinuousSelectionView },
-                                        modifier = Modifier.size(26.dp)
+                                // Smart Group 2: Annotate, Quote & Extract Menu (أدوات القلم والتظليل والاستخلاص)
+                                Box {
+                                    Surface(
+                                        onClick = { showAnnotateAndExtractMenu = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFD97706).copy(alpha = 0.14f)
                                     ) {
-                                        Icon(
-                                            imageVector = if (isPdfContinuousSelectionView) Icons.Default.ViewAgenda else Icons.Default.FormatPaint,
-                                            contentDescription = "تبديل وضع التحديد والتظليل",
-                                            tint = if (isPdfContinuousSelectionView) theme.primaryColor else readerTheme.text,
-                                            modifier = Modifier.size(14.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.EditNote,
+                                                contentDescription = "أدوات القلم والاستخلاص",
+                                                tint = Color(0xFFD97706),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = "أدوات",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFD97706)
+                                            )
+                                        }
                                     }
 
-                                    IconButton(
-                                        onClick = { showExtractPdfRangeDialog = true },
-                                        modifier = Modifier.size(26.dp)
+                                    DropdownMenu(
+                                        expanded = showAnnotateAndExtractMenu,
+                                        onDismissRequest = { showAnnotateAndExtractMenu = false }
                                     ) {
-                                        Icon(
-                                            Icons.Default.ContentCut,
-                                            contentDescription = "استخراج صفحات محددة كملف PDF",
-                                            tint = Color(0xFF0284C7),
-                                            modifier = Modifier.size(14.dp)
+                                        DropdownMenuItem(
+                                            text = { Text("تظليل واقتباس وإرسال للمحرر ✍️", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.FormatQuote, contentDescription = null, tint = Color(0xFFD97706)) },
+                                            onClick = {
+                                                showAnnotateAndExtractMenu = false
+                                                val sampleSnippet = when (extension) {
+                                                    "pdf" -> {
+                                                        val lines = pdfExtractedFullText.lines().filter { it.isNotBlank() }
+                                                        lines.drop((pdfCurrentPage * 4).coerceAtMost((lines.size - 1).coerceAtLeast(0)))
+                                                            .take(4)
+                                                            .joinToString(" ")
+                                                            .ifBlank { "اقتباس من $effectiveFileName (صفحة ${pdfCurrentPage + 1})" }
+                                                    }
+                                                    "epub" -> epubBook?.chapters?.getOrNull(epubCurrentChapterIndex)?.textContent?.take(220) ?: ""
+                                                    "pptx", "ppt" -> pptxPresentation?.slides?.getOrNull(pptxCurrentSlideIndex)?.textContent?.take(220) ?: ""
+                                                    else -> textDocumentContent.take(220)
+                                                }
+                                                activeQuoteDraft = sampleSnippet.ifBlank { "اقتباس مرجعي من $effectiveFileName" }
+                                                activeQuoteNote = ""
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("دفتر التظليلات والملاحظات (${highlights.size + bookmarks.size}) 📒", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.Bookmarks, contentDescription = null, tint = theme.primaryColor) },
+                                            onClick = {
+                                                showAnnotateAndExtractMenu = false
+                                                showBookmarksSheet = true
+                                            }
+                                        )
+                                        if (extension == "pdf") {
+                                            DropdownMenuItem(
+                                                text = { Text(if (isPdfContinuousSelectionView) "العودة لوضع العرض القياسي 📄" else "تفعيل وضع تحديد ونسخ النصوص 🔤", fontSize = 12.sp) },
+                                                leadingIcon = { Icon(Icons.Default.FormatPaint, contentDescription = null, tint = Color(0xFF16A34A)) },
+                                                onClick = {
+                                                    showAnnotateAndExtractMenu = false
+                                                    isPdfContinuousSelectionView = !isPdfContinuousSelectionView
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(if (isPdfDrawingMode) "إغلاق وضع الرسم الحر والأختام 🖌️" else "فتح الرسم الحر والتوقيع والأختام 🖌️", fontSize = 12.sp) },
+                                                leadingIcon = { Icon(Icons.Default.Brush, contentDescription = null, tint = Color(0xFF7C3AED)) },
+                                                onClick = {
+                                                    showAnnotateAndExtractMenu = false
+                                                    isPdfDrawingMode = !isPdfDrawingMode
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("استخراج صفحات محددة كملف PDF ✂️", fontSize = 12.sp) },
+                                                leadingIcon = { Icon(Icons.Default.ContentCut, contentDescription = null, tint = Color(0xFF0284C7)) },
+                                                onClick = {
+                                                    showAnnotateAndExtractMenu = false
+                                                    showExtractPdfRangeDialog = true
+                                                }
+                                            )
+                                        }
+                                        DropdownMenuItem(
+                                            text = { Text("استوديو استخراج النصوص والـ OCR الذكي 🔬", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.DocumentScanner, contentDescription = null, tint = Color(0xFF059669)) },
+                                            onClick = {
+                                                showAnnotateAndExtractMenu = false
+                                                showSmartExtractionStudio = true
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("محوّل الصيغ وأدوات المستندات 🔄", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.Transform, contentDescription = null, tint = theme.primaryColor) },
+                                            onClick = {
+                                                showAnnotateAndExtractMenu = false
+                                                showConverterStudioDialog = true
+                                            }
                                         )
                                     }
                                 }
 
-                                // 9. Smart Save, Vault, Version History & .abdoc Bundle Center
-                                IconButton(
-                                    onClick = {
-                                        saveAndVaultInitialTab = "SAVE_AS"
-                                        showSaveAndVaultCenterSheet = true
-                                    },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.CloudDone,
-                                        contentDescription = "مركز الحفظ المتقدم والخزنة الذكية",
-                                        tint = Color(0xFF16A34A),
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
+                                // Smart Group 3: Save & Vault Menu (قائمة الحفظ والخزنة والمشاركة)
+                                Box {
+                                    Surface(
+                                        onClick = { showSaveAndVaultMenu = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF16A34A).copy(alpha = 0.14f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.CloudDone,
+                                                contentDescription = "الحفظ والخزنة",
+                                                tint = Color(0xFF16A34A),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = "حفظ",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF16A34A)
+                                            )
+                                        }
+                                    }
 
-                                // 10. Converter Studio
-                                IconButton(
-                                    onClick = { showConverterStudioDialog = true },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(Icons.Default.Transform, contentDescription = "تحويل وأمان المستند", tint = theme.primaryColor, modifier = Modifier.size(14.dp))
-                                }
-
-                                // 11. Immersive Fullscreen Toggle
-                                IconButton(
-                                    onClick = { isImmersiveFullscreen = true },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(Icons.Default.Fullscreen, contentDescription = "وضع ملء الشاشة الغامر", tint = readerTheme.text, modifier = Modifier.size(15.dp))
-                                }
-
-                                // 12. Format Settings
-                                IconButton(
-                                    onClick = { showSettingsSheet = true },
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Icon(Icons.Default.Tune, contentDescription = "إعدادات القراءة", tint = readerTheme.text, modifier = Modifier.size(14.dp))
+                                    DropdownMenu(
+                                        expanded = showSaveAndVaultMenu,
+                                        onDismissRequest = { showSaveAndVaultMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("حفظ نسخة وحزمة المستند (.abdoc) 💾", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.SaveAs, contentDescription = null, tint = Color(0xFF16A34A)) },
+                                            onClick = {
+                                                showSaveAndVaultMenu = false
+                                                saveAndVaultInitialTab = "SAVE_AS"
+                                                showSaveAndVaultCenterSheet = true
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(if (isDocumentInVault) "إدارة المستند داخل الخزنة الذكية 🛡️" else "تأمين وحفظ في الخزنة برمز PIN 🔒", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFF0D9488)) },
+                                            onClick = {
+                                                showSaveAndVaultMenu = false
+                                                saveAndVaultInitialTab = "VAULT"
+                                                showSaveAndVaultCenterSheet = true
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("سجل اللقطات والنسخ الزمنية ($snapshotsCount) 🕒", fontSize = 12.sp) },
+                                            leadingIcon = { Icon(Icons.Default.History, contentDescription = null, tint = Color(0xFF2563EB)) },
+                                            onClick = {
+                                                showSaveAndVaultMenu = false
+                                                saveAndVaultInitialTab = "SNAPSHOTS"
+                                                showSaveAndVaultCenterSheet = true
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -3346,6 +3451,80 @@ fun MultiFormatDocumentViewerScreen(
                     ) {
                         Icon(Icons.Default.FullscreenExit, contentDescription = "إنهاء ملء الشاشة", tint = Color.White, modifier = Modifier.size(14.dp))
                         Text(currentPositionLabel, fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // Floating Mini Reading Progress Pill (Auto-hides while actively scrolling)
+            val isActivelyScrolling = pdfLazyListState.isScrollInProgress ||
+                epubContinuousListState.isScrollInProgress ||
+                pptxContinuousListState.isScrollInProgress ||
+                textScrollState.isScrollInProgress ||
+                epubScrollState.isScrollInProgress
+
+            val liveProgressFraction = when {
+                extension == "pdf" && pdfTotalPages > 0 -> ((pdfCurrentPage + 1).toFloat() / pdfTotalPages.toFloat()).coerceIn(0f, 1f)
+                extension == "epub" && epubBook != null && epubBook!!.chapters.isNotEmpty() ->
+                    ((epubCurrentChapterIndex + 1).toFloat() / epubBook!!.chapters.size.toFloat()).coerceIn(0f, 1f)
+                extension in listOf("pptx", "ppt") && pptxPresentation != null && pptxPresentation!!.slides.isNotEmpty() ->
+                    ((pptxCurrentSlideIndex + 1).toFloat() / pptxPresentation!!.slides.size.toFloat()).coerceIn(0f, 1f)
+                textScrollState.maxValue > 0 ->
+                    (textScrollState.value.toFloat() / textScrollState.maxValue.toFloat()).coerceIn(0f, 1f)
+                else -> 1f
+            }
+            val liveProgressPct = (liveProgressFraction * 100).toInt().coerceIn(0, 100)
+            val totalDocWords = remember(currentReadableText) {
+                currentReadableText.split(Regex("\\s+")).count { it.isNotBlank() }
+            }
+            val remainingMins = (((1f - liveProgressFraction) * totalDocWords) / readingSpeedWpm.coerceAtLeast(80)).toInt().coerceAtLeast(1)
+
+            AnimatedVisibility(
+                visible = !isActivelyScrolling && !isLoading,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 10.dp)
+            ) {
+                Surface(
+                    onClick = {
+                        if (extension == "pdf" && pdfTotalPages > 1) {
+                            showPdfThumbnailsStrip = !showPdfThumbnailsStrip
+                        } else if (documentOutline.isNotEmpty()) {
+                            showOutlineSheet = true
+                        }
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFF0F172A).copy(alpha = 0.86f),
+                    shadowElevation = 6.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = currentPositionLabel,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        LinearProgressIndicator(
+                            progress = { liveProgressFraction },
+                            modifier = Modifier
+                                .width(56.dp)
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = theme.primaryColor,
+                            trackColor = Color.White.copy(alpha = 0.22f)
+                        )
+                        Text(
+                            text = "$liveProgressPct% • ~$remainingMins د متبقية",
+                            fontSize = 9.sp,
+                            color = Color(0xFF94A3B8),
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }

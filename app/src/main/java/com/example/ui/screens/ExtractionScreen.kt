@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -36,7 +37,8 @@ import java.util.*
 @Composable
 fun ExtractionScreen(
     viewModel: MainViewModel,
-    onNavigateToEditor: () -> Unit
+    onNavigateToEditor: () -> Unit,
+    onNavigateToFiles: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -56,12 +58,122 @@ fun ExtractionScreen(
     var showSmartExtractionStudio by remember { mutableStateOf(false) }
     var smartStudioInitialTab by remember { mutableStateOf("AREA_FILTER") }
 
+    val targetSourceCount = if (selectedFileIds.isEmpty()) files.size else selectedFileIds.size
+    val extractedWordsCount = remember(passages) {
+        passages.sumOf { p -> p.split(Regex("\\s+")).count { it.isNotBlank() } }
+    }
+    val activeStep = when {
+        passages.isNotEmpty() -> 3
+        topicQuery.isNotBlank() || isExtracting -> 2
+        else -> 1
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // 1. Visual Stepper Workflow & Live Statistics Strip (نظام الخطوات المتسلسلة والإحصائيات)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(theme.elevationDp / 2, RoundedCornerShape(18.dp), spotColor = theme.shadowColor)
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(18.dp)),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // 3-Step Visual Workflow Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val steps = listOf(
+                            Triple(1, "١. اختيار المصدر", Icons.Default.FolderOpen),
+                            Triple(2, "٢. الفلترة والتنظيف", Icons.Default.FilterAlt),
+                            Triple(3, "٣. التصدير للمحرر", Icons.Default.Send)
+                        )
+                        steps.forEachIndexed { idx, (stepNum, label, icon) ->
+                            val isDoneOrActive = activeStep >= stepNum
+                            val stepColor = if (isDoneOrActive) theme.primaryColor else theme.subtleTextColor.copy(alpha = 0.45f)
+                            Surface(
+                                onClick = {
+                                    when (stepNum) {
+                                        1 -> onNavigateToFiles()
+                                        2 -> if (topicQuery.isNotBlank()) viewModel.extractTopic()
+                                        3 -> if (passages.isNotEmpty()) {
+                                            viewModel.saveExtractedPassagesToDbAndCreateProject {
+                                                onNavigateToEditor()
+                                            }
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (activeStep == stepNum) theme.primaryColor.copy(alpha = 0.15f) else Color.Transparent,
+                                border = if (activeStep == stepNum) androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor) else null
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(icon, contentDescription = null, tint = stepColor, modifier = Modifier.size(15.dp))
+                                    Text(
+                                        text = label,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isDoneOrActive) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isDoneOrActive) theme.textColor else theme.subtleTextColor
+                                    )
+                                }
+                            }
+                            if (idx < steps.lastIndex) {
+                                Icon(
+                                    Icons.Default.ChevronLeft,
+                                    contentDescription = null,
+                                    tint = theme.subtleTextColor.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // 3 Colorful Statistical Summary Pills
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val stats = listOf(
+                            Triple("المصادر المحددة", "$targetSourceCount ملف", Color(0xFF0284C7)),
+                            Triple("الفقرات المستخلصة", "${passages.size} فقرة", Color(0xFF059669)),
+                            Triple("إجمالي الكلمات", "$extractedWordsCount كلمة", Color(0xFFD97706))
+                        )
+                        stats.forEach { (title, value, accent) ->
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = accent.copy(alpha = 0.1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, accent.copy(alpha = 0.25f))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(value, fontSize = 13.sp, fontWeight = FontWeight.Black, color = accent)
+                                    Text(title, fontSize = 9.sp, color = theme.subtleTextColor, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Smart Text Extraction & OCR Studio Banner (All 6 New Upgrades)
         item {
             Card(
@@ -195,9 +307,10 @@ fun ExtractionScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(theme.elevationDp, RoundedCornerShape(theme.cornerRadiusDp), spotColor = theme.shadowColor),
+                    .shadow(theme.elevationDp, RoundedCornerShape(theme.cornerRadiusDp), spotColor = theme.shadowColor)
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(theme.cornerRadiusDp)),
                 shape = RoundedCornerShape(theme.cornerRadiusDp),
-                colors = CardDefaults.cardColors(containerColor = theme.surfaceColor)
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
             ) {
                 Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
@@ -215,7 +328,7 @@ fun ExtractionScreen(
                         }
                         Column {
                             Text(
-                                text = "استخلاص المحتوى الذكي (FR-04..FR-07)",
+                                text = "استخلاص المحتوى الذكي",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = theme.textColor
@@ -223,12 +336,12 @@ fun ExtractionScreen(
                             Text(
                                 text = "استخراج الأفكار والفقرات ذات الصلة بموضوعك من الملفات المحددة",
                                 fontSize = 11.sp,
-                                color = theme.textColor.copy(alpha = 0.75f)
+                                color = theme.subtleTextColor
                             )
                         }
                     }
 
-                    // Topic Input (FR-04)
+                    // Topic Input
                     OutlinedTextField(
                         value = topicQuery,
                         onValueChange = { viewModel.topicQuery.value = it },
@@ -239,8 +352,11 @@ fun ExtractionScreen(
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = theme.primaryColor,
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White
+                            unfocusedBorderColor = theme.borderColor,
+                            focusedContainerColor = theme.cardColor,
+                            unfocusedContainerColor = theme.cardColor,
+                            focusedTextColor = theme.textColor,
+                            unfocusedTextColor = theme.textColor
                         )
                     )
 
@@ -279,7 +395,7 @@ fun ExtractionScreen(
                     Text(
                         text = "البحث في: $targetCount ملفات مصادر ${if (selectedFileIds.isEmpty()) "(جميع الملفات)" else "(الملفات المحددة)"}",
                         fontSize = 11.sp,
-                        color = Color.Gray
+                        color = theme.subtleTextColor
                     )
 
                     Button(
@@ -315,9 +431,10 @@ fun ExtractionScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(4.dp, RoundedCornerShape(14.dp)),
+                        .shadow(4.dp, RoundedCornerShape(14.dp))
+                        .border(1.dp, theme.borderColor, RoundedCornerShape(14.dp)),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                 ) {
                     Row(
                         modifier = Modifier
@@ -431,70 +548,220 @@ fun ExtractionScreen(
                 }
             }
 
-            // Passages Items
+            // Passages Items (Interactive Extraction Cards with Color Tags & Direct Chapter Insertion)
             itemsIndexed(passages) { index, passage ->
+                var selectedTagType by remember(index) {
+                    mutableStateOf(
+                        when (index % 4) {
+                            0 -> "QUOTE"
+                            1 -> "DEFINITION"
+                            2 -> "IDEA"
+                            else -> "REVIEW"
+                        }
+                    )
+                }
+                var isExpandedPassage by remember(index) { mutableStateOf(true) }
+                var showChapterSendMenu by remember { mutableStateOf(false) }
+                val activeChapters by viewModel.activeChapters.collectAsState()
+
+                val (tagLabel, tagColor) = when (selectedTagType) {
+                    "QUOTE" -> "🟡 اقتباس هام" to Color(0xFFD97706)
+                    "DEFINITION" -> "🔵 تعريف علمي" to Color(0xFF2563EB)
+                    "IDEA" -> "🟢 فكرة فصل" to Color(0xFF059669)
+                    else -> "🔴 مراجعة وتدقيق" to Color(0xFFDC2626)
+                }
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(2.dp, RoundedCornerShape(14.dp)),
+                        .shadow(2.dp, RoundedCornerShape(14.dp))
+                        .border(1.dp, tagColor.copy(alpha = 0.35f), RoundedCornerShape(14.dp)),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = passage,
-                            fontSize = 13.sp,
-                            lineHeight = 22.sp,
-                            color = Color(0xFF2C2C2C)
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        // Colored Side Accent Strip
+                        Box(
+                            modifier = Modifier
+                                .width(6.dp)
+                                .fillMaxHeight()
+                                .background(tagColor)
                         )
 
-                        Divider(color = Color.Black.copy(alpha = 0.05f))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(text = "فقرة #${index + 1}", fontSize = 11.sp, color = Color.Gray)
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-                                val ctx = androidx.compose.ui.platform.LocalContext.current
-
-                                TextButton(
-                                    onClick = {
-                                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(passage))
-                                        android.widget.Toast.makeText(ctx, "تم نسخ الفقرة إلى الحافظة!", android.widget.Toast.LENGTH_SHORT).show()
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            // Top Row: Passage Index + Interactive Color Tag Switcher + Expand/Collapse
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("نسخ", fontSize = 11.sp)
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = theme.primaryColor.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = "فقرة #${index + 1}",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = theme.primaryColor,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    // 1-Tap Cycle Color Category Tag
+                                    Surface(
+                                        onClick = {
+                                            selectedTagType = when (selectedTagType) {
+                                                "QUOTE" -> "DEFINITION"
+                                                "DEFINITION" -> "IDEA"
+                                                "IDEA" -> "REVIEW"
+                                                else -> "QUOTE"
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = tagColor.copy(alpha = 0.14f),
+                                        border = androidx.compose.foundation.BorderStroke(0.5.dp, tagColor.copy(alpha = 0.4f))
+                                    ) {
+                                        Text(
+                                            text = tagLabel,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = tagColor,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
 
-                                TextButton(
-                                    onClick = {
-                                        editingPassageIndex = index
-                                        editingPassageText = passage
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("تعديل", fontSize = 11.sp)
+                                Text(
+                                    text = if (isExpandedPassage) "طي النص ▲" else "توسيع ▼",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = theme.subtleTextColor,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { isExpandedPassage = !isExpandedPassage }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            Text(
+                                text = passage,
+                                fontSize = 13.sp,
+                                lineHeight = 22.sp,
+                                color = theme.textColor,
+                                maxLines = if (isExpandedPassage) Int.MAX_VALUE else 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            HorizontalDivider(color = theme.borderColor)
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Direct Insert into Specific Chapter Menu
+                                Box {
+                                    Surface(
+                                        onClick = { showChapterSendMenu = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = theme.primaryColor.copy(alpha = 0.12f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(Icons.Default.Send, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(12.dp))
+                                            Text("إدراج في فصل 📥", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                                        }
+                                    }
+
+                                    DropdownMenu(
+                                        expanded = showChapterSendMenu,
+                                        onDismissRequest = { showChapterSendMenu = false }
+                                    ) {
+                                        if (activeChapters.isEmpty()) {
+                                            DropdownMenuItem(
+                                                text = { Text("إنشاء مشروع جديد بهذه الفقرة 🚀", fontSize = 11.sp) },
+                                                onClick = {
+                                                    showChapterSendMenu = false
+                                                    viewModel.createProject(
+                                                        title = "مشروع استخلاص: ${topicQuery.ifBlank { "مقتطفات" }}",
+                                                        type = "E_BOOK",
+                                                        templateId = "novel_action",
+                                                        emotions = listOf("warmth"),
+                                                        initialContent = passage,
+                                                        onCreated = { onNavigateToEditor() }
+                                                    )
+                                                }
+                                            )
+                                        } else {
+                                            activeChapters.forEachIndexed { chIdx, chItem ->
+                                                DropdownMenuItem(
+                                                    text = { Text("إدراج في: ${chItem.tabName}", fontSize = 11.sp) },
+                                                    onClick = {
+                                                        showChapterSendMenu = false
+                                                        viewModel.selectChapter(chIdx)
+                                                        viewModel.insertQuoteIntoActiveChapter(
+                                                            quoteText = passage,
+                                                            sourceFileName = "الاستخلاص الذكي",
+                                                            positionLabel = "فقرة #${index + 1}",
+                                                            note = tagLabel
+                                                        )
+                                                        Toast.makeText(context, "📥 تم إدراج الفقرة في «${chItem.tabName}»", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
 
-                                TextButton(
-                                    onClick = { viewModel.deleteExtractedPassage(index) },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color.Red, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("حذف", fontSize = 11.sp, color = Color.Red)
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                                    val ctx = androidx.compose.ui.platform.LocalContext.current
+
+                                    TextButton(
+                                        onClick = {
+                                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(passage))
+                                            android.widget.Toast.makeText(ctx, "تم نسخ الفقرة إلى الحافظة!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("نسخ", fontSize = 10.sp)
+                                    }
+
+                                    TextButton(
+                                        onClick = {
+                                            editingPassageIndex = index
+                                            editingPassageText = passage
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("تعديل", fontSize = 10.sp)
+                                    }
+
+                                    TextButton(
+                                        onClick = { viewModel.deleteExtractedPassage(index) },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("حذف", fontSize = 10.sp, color = Color(0xFFEF4444))
+                                    }
                                 }
                             }
                         }
@@ -668,9 +935,10 @@ fun SavedExtractionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(2.dp, RoundedCornerShape(12.dp)),
+            .shadow(2.dp, RoundedCornerShape(12.dp))
+            .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
     ) {
         Row(
             modifier = Modifier
@@ -690,7 +958,7 @@ fun SavedExtractionCard(
                 Text(
                     text = dateFormat.format(Date(record.extractionDate)),
                     fontSize = 10.sp,
-                    color = Color.Gray
+                    color = theme.subtleTextColor
                 )
             }
 
@@ -713,7 +981,7 @@ fun SavedExtractionCard(
                 }
 
                 IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.DeleteOutline, contentDescription = "حذف", tint = theme.subtleTextColor, modifier = Modifier.size(16.dp))
                 }
             }
         }

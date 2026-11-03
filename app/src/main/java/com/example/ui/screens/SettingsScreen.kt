@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,10 +25,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.defaultAppThemes
 import com.example.ui.MainViewModel
 import com.example.ui.SavedBooksViewModel
 import com.example.util.AppLanguage
 import com.example.util.AppLocalization
+import com.example.util.FontStorageManager
 
 @Composable
 fun SettingsScreen(
@@ -150,94 +154,280 @@ fun SettingsScreen(
                 color = theme.primaryColor
             )
 
-            // 1.A Branch: 3D Themes (مدمجة كفرع رئيسي داخل الإعدادات)
+            // 1.A Live Visual Theme Swatch Studio (بطاقات المعاينة الحية للثيمات والوضع الليلي/الورقي)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(2.dp, RoundedCornerShape(12.dp))
-                    .border(1.dp, theme.primaryColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                    .clickable { showThemesBranch = true },
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                    .shadow(2.dp, RoundedCornerShape(14.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(theme.primaryColor),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Palette, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                        }
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(theme.primaryColor),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Palette, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
+                            Column {
                                 Text(
-                                    text = "فرع الثيمات والتخصيص البصري 3D",
+                                    text = "استوديو المظاهر الحية (Live Theme Swatches)",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = theme.textColor
                                 )
-                                Surface(
-                                    color = theme.primaryColor.copy(alpha = 0.14f),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = theme.name,
-                                        fontSize = 9.sp,
-                                        color = theme.primaryColor,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                Text(
+                                    text = "اختر المظهر بلمسة واحدة أو افتح تخصيص الـ 3D المتقدم",
+                                    fontSize = 10.sp,
+                                    color = theme.subtleTextColor
+                                )
                             }
+                        }
+
+                        Surface(
+                            onClick = { showThemesBranch = true },
+                            shape = RoundedCornerShape(8.dp),
+                            color = theme.primaryColor.copy(alpha = 0.14f)
+                        ) {
                             Text(
-                                text = "تخصيص ألوان التطبيق، إضاءة الأوراق الدافئة، وعمق الظلال ثلاثية الأبعاد",
+                                text = "تخصيص 3D ◀",
                                 fontSize = 10.sp,
-                                color = Color.Gray
+                                fontWeight = FontWeight.Bold,
+                                color = theme.primaryColor,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(theme.primaryColor)
-                        )
-                        Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+
+                    // Horizontal Swatch Cards
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(defaultAppThemes, key = { it.id }) { itemTheme ->
+                            val isSelected = itemTheme.id == theme.id
+                            Surface(
+                                onClick = { viewModel.currentThemeId.value = itemTheme.id },
+                                shape = RoundedCornerShape(14.dp),
+                                color = itemTheme.surfaceColor,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = if (isSelected) 2.5.dp else 1.dp,
+                                    color = if (isSelected) itemTheme.primaryColor else itemTheme.borderColor
+                                ),
+                                modifier = Modifier
+                                    .width(128.dp)
+                                    .height(92.dp)
+                                    .shadow(if (isSelected) 6.dp else 2.dp, RoundedCornerShape(14.dp))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(8.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .clip(CircleShape)
+                                                    .background(itemTheme.primaryColor)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .clip(CircleShape)
+                                                    .background(itemTheme.secondaryColor)
+                                            )
+                                        }
+                                        if (isSelected) {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = "نشط",
+                                                tint = itemTheme.primaryColor,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
+                                    }
+
+                                    // Miniature Paper Preview Box inside Swatch
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = itemTheme.elevatedCardColor,
+                                        border = androidx.compose.foundation.BorderStroke(0.5.dp, itemTheme.borderColor),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                                            Text(
+                                                text = "أبجد هوز حطي",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = itemTheme.textColor
+                                            )
+                                            Text(
+                                                text = itemTheme.name,
+                                                fontSize = 8.sp,
+                                                color = itemTheme.subtleTextColor,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // 1.B Branch: Book Cover Templates Studio
+            // 1.B Live Arabic Font & Typography Previewer Studio (معاينة فورية للخطوط العربية)
+            val selectedEditorFont by viewModel.selectedEditorFont.collectAsState()
+            val customFonts by viewModel.customFonts.collectAsState()
+            var previewFontSize by remember { mutableFloatStateOf(16f) }
+            val activePreviewFontFamily = remember(selectedEditorFont, customFonts) {
+                FontStorageManager.getFontFamily(selectedEditorFont, customFonts)
+            }
+            val presetFonts = remember {
+                listOf("الافتراضي", "الأميري (Amiri)", "القاهرة (Cairo)", "تجوال (Tajawal)", "الرقعة", "الكوفي")
+            }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(2.dp, RoundedCornerShape(14.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.FontDownload, contentDescription = null, tint = theme.primaryColor, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = "معاينة الخطوط العربية الحية (${selectedEditorFont})",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = theme.textColor
+                            )
+                        }
+                        Text(
+                            text = "${previewFontSize.toInt()} sp",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = theme.primaryColor
+                        )
+                    }
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(presetFonts) { fontName ->
+                            val isChosen = selectedEditorFont == fontName
+                            Surface(
+                                onClick = { viewModel.selectEditorFont(fontName) },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isChosen) theme.primaryColor else theme.cardColor,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    if (isChosen) theme.primaryColor else theme.borderColor
+                                )
+                            ) {
+                                Text(
+                                    text = fontName,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isChosen) Color.White else theme.textColor,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Live Arabic Quote Sample Box
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = theme.cardColor,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, theme.borderColor),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "«وخيرُ جليسٍ في الزمانِ كتابُ • تُبحرُ في سطورهِ العقولُ وتزدهرُ به الآدابُ»",
+                                fontFamily = activePreviewFontFamily,
+                                fontSize = previewFontSize.sp,
+                                lineHeight = (previewFontSize * 1.5f).sp,
+                                fontWeight = FontWeight.Medium,
+                                color = theme.textColor
+                            )
+                            Slider(
+                                value = previewFontSize,
+                                onValueChange = { previewFontSize = it },
+                                valueRange = 12f..24f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = theme.primaryColor,
+                                    activeTrackColor = theme.primaryColor
+                                ),
+                                modifier = Modifier.height(22.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 1.C Branch: Book Cover Templates Studio
             SettingsBranchRowCard(
                 title = "فرع استوديو نماذج أغلفة الكتب",
                 subtitle = "تصفح النماذج الجاهزة، رفع صور من الجوال، وتخصيص عناوين الأغلفة",
                 icon = Icons.Default.PhotoLibrary,
                 iconBg = Color(0xFF854D0E),
                 textColor = theme.textColor,
+                cardColor = theme.elevatedCardColor,
+                subtleColor = theme.subtleTextColor,
+                borderColor = theme.borderColor,
                 onClick = { showCoverStudio = true }
             )
 
-            // 1.C Language Selection (Compact)
+            // 1.D Language Selection (Compact)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(2.dp, RoundedCornerShape(12.dp)),
+                    .shadow(2.dp, RoundedCornerShape(12.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp)),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
@@ -249,7 +439,7 @@ fun SettingsScreen(
                         Text(
                             text = if (currentLang.layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl) "RTL (يمين لليسار)" else "LTR (Left-to-Right)",
                             fontSize = 10.sp,
-                            color = Color.Gray
+                            color = theme.subtleTextColor
                         )
                     }
 
@@ -303,6 +493,9 @@ fun SettingsScreen(
                 icon = Icons.Default.MenuBook,
                 iconBg = Color(0xFF0F766E),
                 textColor = theme.textColor,
+                cardColor = theme.elevatedCardColor,
+                subtleColor = theme.subtleTextColor,
+                borderColor = theme.borderColor,
                 onClick = { showSavedBooks = true }
             )
 
@@ -315,6 +508,9 @@ fun SettingsScreen(
                 icon = Icons.Default.Insights,
                 iconBg = Color(0xFF0D9488),
                 textColor = theme.textColor,
+                cardColor = theme.elevatedCardColor,
+                subtleColor = theme.subtleTextColor,
+                borderColor = theme.borderColor,
                 onClick = { showAnalyticsDialog = true }
             )
 
@@ -325,6 +521,9 @@ fun SettingsScreen(
                 icon = Icons.Default.Verified,
                 iconBg = Color(0xFF2563EB),
                 textColor = theme.textColor,
+                cardColor = theme.elevatedCardColor,
+                subtleColor = theme.subtleTextColor,
+                borderColor = theme.borderColor,
                 onClick = { showPreflightDialog = true }
             )
 
@@ -335,6 +534,9 @@ fun SettingsScreen(
                 icon = Icons.Default.Public,
                 iconBg = Color(0xFF8B5CF6),
                 textColor = theme.textColor,
+                cardColor = theme.elevatedCardColor,
+                subtleColor = theme.subtleTextColor,
+                borderColor = theme.borderColor,
                 onClick = { showBrowserDialog = true }
             )
 
@@ -342,9 +544,10 @@ fun SettingsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(2.dp, RoundedCornerShape(12.dp)),
+                    .shadow(2.dp, RoundedCornerShape(12.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp)),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
             ) {
                 Row(
                     modifier = Modifier
@@ -377,7 +580,7 @@ fun SettingsScreen(
                             Text(
                                 text = "إظهار الاقتراحات الشعورية وبالونات الإلهام داخل شاشة الكتابة",
                                 fontSize = 10.sp,
-                                color = Color.Gray
+                                color = theme.subtleTextColor
                             )
                         }
                     }
@@ -408,6 +611,9 @@ fun SettingsScreen(
                 icon = Icons.Default.Person,
                 iconBg = if (isLoggedIn) Color(0xFF10B981) else Color(0xFF64748B),
                 textColor = theme.textColor,
+                cardColor = theme.elevatedCardColor,
+                subtleColor = theme.subtleTextColor,
+                borderColor = theme.borderColor,
                 onClick = { showProfileDialog = true }
             )
 
@@ -416,9 +622,10 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(2.dp, RoundedCornerShape(12.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp))
                     .clickable { showSubscriptionDialog = true },
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = if (isVip) Color(0xFFFEF3C7) else Color.White)
+                colors = CardDefaults.cardColors(containerColor = if (isVip && !theme.isDark) Color(0xFFFEF3C7) else theme.elevatedCardColor)
             ) {
                 Row(
                     modifier = Modifier
@@ -446,10 +653,10 @@ fun SettingsScreen(
                                     }
                                 }
                             }
-                            Text("إزالة الإعلانات، وتوليد صور بالذكاء الاصطناعي بدون حدود", fontSize = 10.sp, color = Color.Gray)
+                            Text("إزالة الإعلانات، وتوليد صور بالذكاء الاصطناعي بدون حدود", fontSize = 10.sp, color = theme.subtleTextColor)
                         }
                     }
-                    Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = theme.subtleTextColor, modifier = Modifier.size(18.dp))
                 }
             }
 
@@ -457,9 +664,10 @@ fun SettingsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(2.dp, RoundedCornerShape(12.dp)),
+                    .shadow(2.dp, RoundedCornerShape(12.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp)),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -493,7 +701,7 @@ fun SettingsScreen(
                                 Text(
                                     text = "الحساب: ${syncMeta.connectedAccountEmail ?: "غير متصل"} • ${syncMeta.lastSyncMessage}",
                                     fontSize = 10.sp,
-                                    color = Color.Gray
+                                    color = theme.subtleTextColor
                                 )
                             }
                         }
@@ -580,6 +788,9 @@ fun SettingsScreen(
                 icon = Icons.Default.FamilyRestroom,
                 iconBg = Color(0xFF0284C7),
                 textColor = theme.textColor,
+                cardColor = theme.elevatedCardColor,
+                subtleColor = theme.subtleTextColor,
+                borderColor = theme.borderColor,
                 onClick = { showParentalDialog = true }
             )
 
@@ -587,9 +798,10 @@ fun SettingsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(2.dp, RoundedCornerShape(12.dp)),
+                    .shadow(2.dp, RoundedCornerShape(12.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp)),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
             ) {
                 Row(
                     modifier = Modifier
@@ -677,9 +889,10 @@ fun SettingsScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(2.dp, RoundedCornerShape(12.dp)),
+                    .shadow(2.dp, RoundedCornerShape(12.dp))
+                    .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp)),
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
             ) {
                 Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -826,15 +1039,19 @@ private fun SettingsBranchRowCard(
     textColor: Color,
     badgeText: String? = null,
     badgeColor: Color = iconBg,
+    cardColor: Color = Color.White,
+    subtleColor: Color = Color.Gray,
+    borderColor: Color = Color(0xFFE2E8F0),
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(2.dp, RoundedCornerShape(12.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Row(
             modifier = Modifier
@@ -867,7 +1084,7 @@ private fun SettingsBranchRowCard(
                         )
                         if (badgeText != null) {
                             Surface(
-                                color = badgeColor.copy(alpha = 0.12f),
+                                color = badgeColor.copy(alpha = 0.14f),
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(
@@ -883,11 +1100,11 @@ private fun SettingsBranchRowCard(
                     Text(
                         text = subtitle,
                         fontSize = 10.sp,
-                        color = Color.Gray
+                        color = subtleColor
                     )
                 }
             }
-            Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = subtleColor, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -896,6 +1113,6 @@ private fun SettingsBranchRowCard(
 fun StatItem(title: String, value: String, theme: com.example.data.model.AppThemeData) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(value, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
-        Text(title, fontSize = 10.sp, color = Color.Gray)
+        Text(title, fontSize = 10.sp, color = theme.subtleTextColor)
     }
 }
