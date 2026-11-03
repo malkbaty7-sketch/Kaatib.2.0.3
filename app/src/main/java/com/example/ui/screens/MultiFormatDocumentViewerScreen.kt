@@ -64,22 +64,31 @@ import com.example.util.DocmoDocumentBridge
 import com.example.util.DocumentBookmarkItem
 import com.example.util.DocumentFlashcardItem
 import com.example.util.DocumentHighlightItem
+import com.example.util.DocumentMindMapNode
 import com.example.util.DocumentOutlineItem
 import com.example.util.DocumentParser
 import com.example.util.EpubBookContent
+import com.example.util.PageVoiceNoteItem
 import com.example.util.MultiFormatDocumentEngine
 import com.example.util.PdfDiagnosticReport
 import com.example.util.PdfInkStroke
+import com.example.util.PdfRedactionRect
 import com.example.util.PdfStampItem
 import com.example.util.PptxPresentationContent
 import com.example.util.SpreadsheetContent
 import com.example.util.TtsManager
 import com.example.util.TtsPlaybackState
+import com.example.util.DocumentRecoveryCheckpoint
+import com.example.util.DocumentVaultAndSaveManager
+import com.example.util.LiveSaveState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,8 +101,12 @@ fun MultiFormatDocumentViewerScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val uri = remember(uriString) { Uri.parse(uriString) }
-    val extension = remember(fileName) { MultiFormatDocumentEngine.getFileExtension(fileName) }
+    var activeUriOverride by remember(uriString) { mutableStateOf<String?>(null) }
+    var activeFileNameOverride by remember(fileName) { mutableStateOf<String?>(null) }
+    val effectiveUriString = activeUriOverride ?: uriString
+    val effectiveFileName = activeFileNameOverride ?: fileName
+    val uri = remember(effectiveUriString) { Uri.parse(effectiveUriString) }
+    val extension = remember(effectiveFileName) { MultiFormatDocumentEngine.getFileExtension(effectiveFileName) }
 
     // Saved Progress state from Room
     val savedProgress by viewModel.getDocumentProgress(uriString).collectAsState(initial = null)
@@ -181,6 +194,62 @@ fun MultiFormatDocumentViewerScreen(
     var pomodoroRemainingSeconds by remember { mutableIntStateOf(25 * 60) }
     var activeAmbientSoundMode by remember { mutableStateOf("OFF") }
     var readingSpeedWpm by remember { mutableIntStateOf(180) }
+
+    // =========================================================================
+    // ROUND 3: NEXT-GEN COGNITIVE & PUBLISHING SUITE STATES
+    // =========================================================================
+    val activeChapters by viewModel.activeChapters.collectAsState()
+    val activeChapterIndex by viewModel.activeChapterIndex.collectAsState()
+    val currentEditorChapter = activeChapters.getOrNull(activeChapterIndex)
+
+    // 1. Interactive Document Mind Map
+    var showMindMapSheet by remember { mutableStateOf(false) }
+    var customMindMapNodes by remember { mutableStateOf<List<DocumentMindMapNode>>(emptyList()) }
+
+    // 2. RSVP Speed Reader (200 - 900 WPM)
+    var showRsvpSpeedReaderDialog by remember { mutableStateOf(false) }
+
+    // 3. Ask Document Q&A & Originality / Overlap Checker
+    var showAskDocumentAndOriginalitySheet by remember { mutableStateOf(false) }
+
+    // 4. Interactive Charts & Statistical Data Visualizer
+    var showChartsAndStatsSheet by remember { mutableStateOf(false) }
+
+    // 5. PDF Blackout Redaction & Digital Forensics Inspector
+    var showRedactionAndForensicsSheet by remember { mutableStateOf(false) }
+    var isPdfRedactionMode by remember { mutableStateOf(false) }
+    var pdfRedactions by remember { mutableStateOf<List<PdfRedactionRect>>(emptyList()) }
+
+    // 6. Smart Magnifier Loupe (2.5x), Auto-Crop White Margins & Presenter Laser Pointer
+    var isMagnifierLoupeActive by remember { mutableStateOf(false) }
+    var isPdfAutoCropMargins by remember { mutableStateOf(false) }
+    var isLaserPointerActive by remember { mutableStateOf(false) }
+
+    // =========================================================================
+    // ROUND 4: PRO DOCUMENT & RESEARCH WORKSTATION STATES
+    // =========================================================================
+    var showPdfVisualOrganizerSheet by remember { mutableStateOf(false) }
+    var showArabicLinguisticsSheet by remember { mutableStateOf(false) }
+    var showTimelineAndEntitiesSheet by remember { mutableStateOf(false) }
+    var showQuizAnd3DFlashcardsSheet by remember { mutableStateOf(false) }
+    var showOfficialStampAndCertSheet by remember { mutableStateOf(false) }
+    var showVoiceNotesSheet by remember { mutableStateOf(false) }
+    var pageVoiceNotes by remember { mutableStateOf<List<PageVoiceNoteItem>>(emptyList()) }
+    var showBackOfBookIndexSheet by remember { mutableStateOf(false) }
+    var showAlignmentGridOverlay by remember { mutableStateOf(false) }
+
+    // =========================================================================
+    // ROUND 5: SMART DOCUMENT SAVING, VAULT, VERSION HISTORY & .ABDOC BUNDLE
+    // =========================================================================
+    var showSaveAndVaultCenterSheet by remember { mutableStateOf(false) }
+    var saveAndVaultInitialTab by remember { mutableStateOf("SAVE_AS") }
+    var liveSaveState by remember { mutableStateOf(LiveSaveState.SAVED) }
+    var lastAutoSavedTimeText by remember { mutableStateOf("") }
+    var pendingRecoveryCheckpoint by remember { mutableStateOf<DocumentRecoveryCheckpoint?>(null) }
+    var isDocumentInVault by remember { mutableStateOf(false) }
+    var snapshotsCount by remember { mutableIntStateOf(0) }
+    var autoSaveInitialized by remember { mutableStateOf(false) }
+
 
     // Format specific states
     // PDF
@@ -398,11 +467,12 @@ fun MultiFormatDocumentViewerScreen(
     }
 
     // Auto-save on back or disposal & cleanup TTS + Ambient Audio
-    DisposableEffect(Unit) {
+    DisposableEffect(effectiveUriString) {
         onDispose {
             MultiFormatDocumentEngine.stopAmbientFocusSound()
             ttsManager.shutdown()
             saveCurrentProgress()
+            DocumentVaultAndSaveManager.markSessionCleanOnNormalExit(context, effectiveUriString)
         }
     }
 
@@ -413,26 +483,39 @@ fun MultiFormatDocumentViewerScreen(
             MultiFormatDocumentEngine.stopAmbientFocusSound()
             ttsManager.stop()
             saveCurrentProgress()
+            DocumentVaultAndSaveManager.markSessionCleanOnNormalExit(context, effectiveUriString)
             onBack()
         }
     }
 
     // Load Document Content & Initial Progress & Bookmarks & Highlights & Workstation Data
-    LaunchedEffect(uriString) {
+    LaunchedEffect(effectiveUriString) {
         isLoading = true
+        autoSaveInitialized = false
         withContext(Dispatchers.IO) {
-            bookmarks = MultiFormatDocumentEngine.getDocumentBookmarks(context, uriString)
-            highlights = MultiFormatDocumentEngine.getDocumentHighlights(context, uriString)
-            flashcards = MultiFormatDocumentEngine.getDocumentFlashcards(context, uriString)
-            pdfInkStrokes = MultiFormatDocumentEngine.getPdfInkStrokes(context, uriString)
-            pdfStamps = MultiFormatDocumentEngine.getPdfStamps(context, uriString)
-            val initialSaved = viewModel.getDocumentProgressSync(uriString)
+            bookmarks = MultiFormatDocumentEngine.getDocumentBookmarks(context, effectiveUriString)
+            highlights = MultiFormatDocumentEngine.getDocumentHighlights(context, effectiveUriString)
+            flashcards = MultiFormatDocumentEngine.getDocumentFlashcards(context, effectiveUriString)
+            pdfInkStrokes = MultiFormatDocumentEngine.getPdfInkStrokes(context, effectiveUriString)
+            pdfStamps = MultiFormatDocumentEngine.getPdfStamps(context, effectiveUriString)
+            customMindMapNodes = MultiFormatDocumentEngine.getCustomMindMapNodes(context, effectiveUriString)
+            pdfRedactions = MultiFormatDocumentEngine.getPdfRedactions(context, effectiveUriString)
+            pageVoiceNotes = MultiFormatDocumentEngine.getPageVoiceNotes(context, effectiveUriString)
+            pendingRecoveryCheckpoint = DocumentVaultAndSaveManager.checkPendingRecoveryCheckpoint(context, effectiveUriString)
+            isDocumentInVault = DocumentVaultAndSaveManager.isDocumentInVault(context, effectiveUriString) != null
+            val existingSnaps = DocumentVaultAndSaveManager.getDocumentSnapshots(context, effectiveUriString)
+            snapshotsCount = existingSnaps.size
+            DocumentVaultAndSaveManager.markSessionActiveDirty(context, effectiveUriString)
+            val initialSaved = viewModel.getDocumentProgressSync(effectiveUriString)
             when (extension) {
                 "pdf" -> {
                     pdfTotalPages = MultiFormatDocumentEngine.getPdfPageCount(context, uri)
                     val startPage = initialSaved?.lastPageIndex?.coerceIn(0, (pdfTotalPages - 1).coerceAtLeast(0)) ?: 0
                     pdfCurrentPage = startPage
-                    pdfBitmap = MultiFormatDocumentEngine.renderPdfPage(context, uri, startPage)
+                    val rawBmp = MultiFormatDocumentEngine.renderPdfPage(context, uri, startPage)
+                    pdfBitmap = if (isPdfAutoCropMargins && rawBmp != null) {
+                        MultiFormatDocumentEngine.cropPdfBitmapWhitespace(rawBmp)
+                    } else rawBmp
                     // Extract text in background for TTS / Quotes / Search
                     try {
                         pdfExtractedFullText = DocumentParser.parseUri(context, uri).text
@@ -490,6 +573,70 @@ fun MultiFormatDocumentViewerScreen(
                 initialProgressLoaded = true
             }
         }
+        lastAutoSavedTimeText = SimpleDateFormat("HH:mm", Locale.US).format(Date())
+        liveSaveState = if (pendingRecoveryCheckpoint != null) LiveSaveState.RECOVERY_AVAILABLE else LiveSaveState.SAVED
+        autoSaveInitialized = true
+    }
+
+    // Smart Auto-Save & Crash Recovery Checkpoint Watcher
+    LaunchedEffect(
+        highlights,
+        bookmarks,
+        pdfInkStrokes,
+        pdfStamps,
+        flashcards,
+        customMindMapNodes,
+        pdfRedactions,
+        pageVoiceNotes,
+        textDocumentContent
+    ) {
+        if (!autoSaveInitialized || isLoading) return@LaunchedEffect
+        liveSaveState = LiveSaveState.UNSAVED_CHANGES
+        delay(900L)
+        liveSaveState = LiveSaveState.SAVING
+        withContext(Dispatchers.IO) {
+            DocumentVaultAndSaveManager.recordAutoSaveCheckpoint(
+                context = context,
+                uriString = effectiveUriString,
+                documentName = effectiveFileName,
+                highlights = highlights,
+                bookmarks = bookmarks,
+                inkStrokes = pdfInkStrokes,
+                stamps = pdfStamps,
+                flashcards = flashcards,
+                mindMapNodes = customMindMapNodes,
+                redactions = pdfRedactions,
+                voiceNotes = pageVoiceNotes,
+                editedTextContent = textDocumentContent,
+                markSessionClean = false
+            )
+            // Create initial auto-snapshot if user made edits and no snapshot exists yet
+            val currentSnaps = DocumentVaultAndSaveManager.getDocumentSnapshots(context, effectiveUriString)
+            val totalAnnotations = highlights.size + bookmarks.size + pdfInkStrokes.size + pdfStamps.size + flashcards.size + pageVoiceNotes.size
+            if (currentSnaps.isEmpty() && totalAnnotations > 0) {
+                DocumentVaultAndSaveManager.createDocumentSnapshot(
+                    context = context,
+                    uriString = effectiveUriString,
+                    documentName = effectiveFileName,
+                    label = "لقطة حفظ تلقائي ذكي",
+                    isAutoSnapshot = true,
+                    highlights = highlights,
+                    bookmarks = bookmarks,
+                    inkStrokes = pdfInkStrokes,
+                    stamps = pdfStamps,
+                    flashcards = flashcards,
+                    mindMapNodes = customMindMapNodes,
+                    redactions = pdfRedactions,
+                    voiceNotes = pageVoiceNotes,
+                    editedTextContent = textDocumentContent
+                )
+            }
+            snapshotsCount = DocumentVaultAndSaveManager.getDocumentSnapshots(context, effectiveUriString).size
+            isDocumentInVault = DocumentVaultAndSaveManager.isDocumentInVault(context, effectiveUriString) != null
+        }
+        delay(250L)
+        lastAutoSavedTimeText = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+        liveSaveState = LiveSaveState.SAVED
     }
 
     // Restore text scroll position after content loaded
@@ -499,11 +646,14 @@ fun MultiFormatDocumentViewerScreen(
         }
     }
 
-    // PDF Page Change renderer
-    LaunchedEffect(pdfCurrentPage) {
+    // PDF Page Change & Auto-Crop Margins renderer
+    LaunchedEffect(pdfCurrentPage, isPdfAutoCropMargins) {
         if (extension == "pdf" && pdfTotalPages > 0) {
             withContext(Dispatchers.IO) {
-                pdfBitmap = MultiFormatDocumentEngine.renderPdfPage(context, uri, pdfCurrentPage)
+                val rawBmp = MultiFormatDocumentEngine.renderPdfPage(context, uri, pdfCurrentPage)
+                pdfBitmap = if (isPdfAutoCropMargins && rawBmp != null) {
+                    MultiFormatDocumentEngine.cropPdfBitmapWhitespace(rawBmp)
+                } else rawBmp
             }
             pdfScale = 1f
             pdfOffset = androidx.compose.ui.geometry.Offset.Zero
@@ -783,7 +933,23 @@ fun MultiFormatDocumentViewerScreen(
                                     }
                                 }
 
-                                // 9. Converter Studio
+                                // 9. Smart Save, Vault, Version History & .abdoc Bundle Center
+                                IconButton(
+                                    onClick = {
+                                        saveAndVaultInitialTab = "SAVE_AS"
+                                        showSaveAndVaultCenterSheet = true
+                                    },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.CloudDone,
+                                        contentDescription = "مركز الحفظ المتقدم والخزنة الذكية",
+                                        tint = Color(0xFF16A34A),
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+
+                                // 10. Converter Studio
                                 IconButton(
                                     onClick = { showConverterStudioDialog = true },
                                     modifier = Modifier.size(26.dp)
@@ -791,7 +957,7 @@ fun MultiFormatDocumentViewerScreen(
                                     Icon(Icons.Default.Transform, contentDescription = "تحويل وأمان المستند", tint = theme.primaryColor, modifier = Modifier.size(14.dp))
                                 }
 
-                                // 10. Immersive Fullscreen Toggle
+                                // 11. Immersive Fullscreen Toggle
                                 IconButton(
                                     onClick = { isImmersiveFullscreen = true },
                                     modifier = Modifier.size(26.dp)
@@ -799,7 +965,7 @@ fun MultiFormatDocumentViewerScreen(
                                     Icon(Icons.Default.Fullscreen, contentDescription = "وضع ملء الشاشة الغامر", tint = readerTheme.text, modifier = Modifier.size(15.dp))
                                 }
 
-                                // 11. Format Settings
+                                // 12. Format Settings
                                 IconButton(
                                     onClick = { showSettingsSheet = true },
                                     modifier = Modifier.size(26.dp)
@@ -810,7 +976,7 @@ fun MultiFormatDocumentViewerScreen(
                         }
                     }
 
-                    // Pro Workstation Quick Ribbon (All 6 Advanced Upgrade Packages)
+                    // Pro Workstation Quick Ribbon (All Advanced Upgrade Packages + Smart Save & Vault System)
                     Surface(
                         color = readerTheme.surface,
                         tonalElevation = 2.dp,
@@ -823,6 +989,79 @@ fun MultiFormatDocumentViewerScreen(
                             horizontalArrangement = Arrangement.spacedBy(5.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Live Auto-Save Status Indicator + Quick Open Save Center
+                            item {
+                                LiveAutoSaveStatusBadge(
+                                    saveState = liveSaveState,
+                                    lastSavedTimeText = lastAutoSavedTimeText,
+                                    isInVault = isDocumentInVault,
+                                    snapshotsCount = snapshotsCount,
+                                    onClick = {
+                                        saveAndVaultInitialTab = "SAVE_AS"
+                                        showSaveAndVaultCenterSheet = true
+                                    }
+                                )
+                            }
+
+                            // Quick Vault & PIN Chip
+                            item {
+                                Surface(
+                                    onClick = {
+                                        saveAndVaultInitialTab = "VAULT"
+                                        showSaveAndVaultCenterSheet = true
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isDocumentInVault) Color(0xFF0D9488) else Color(0xFF0D9488).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = if (isDocumentInVault) "🛡️ مؤمّن بالخزنة" else "🛡️ حفظ بالخزنة و PIN",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isDocumentInVault) Color.White else Color(0xFF0D9488),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Quick Version History Chip
+                            item {
+                                Surface(
+                                    onClick = {
+                                        saveAndVaultInitialTab = "VERSIONS"
+                                        showSaveAndVaultCenterSheet = true
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF7C3AED).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = "🕒 سجل الإصدارات ($snapshotsCount)",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF7C3AED),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // Quick .abdoc Bundle Chip
+                            item {
+                                Surface(
+                                    onClick = {
+                                        saveAndVaultInitialTab = "BUNDLE"
+                                        showSaveAndVaultCenterSheet = true
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFD97706).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "📦 حزمة .abdoc الشاملة",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFD97706),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
                             // Package 1: PDF Freehand Ink & Stamps
                             if (extension == "pdf") {
                                 item {
@@ -944,6 +1183,348 @@ fun MultiFormatDocumentViewerScreen(
                                     )
                                 }
                             }
+
+                            // =========================================================
+                            // ROUND 3: NEXT-GEN COGNITIVE & PUBLISHING SUITE CHIPS
+                            // =========================================================
+
+                            // 1. Interactive Mind Map
+                            item {
+                                Surface(
+                                    onClick = { showMindMapSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF2563EB).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = "🕸️ الخريطة الذهنية",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2563EB),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 2. RSVP Speed Reader (200 - 900 WPM)
+                            item {
+                                Surface(
+                                    onClick = { showRsvpSpeedReaderDialog = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFEF4444).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = "⚡ القراءة السريعة RSVP",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFEF4444),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 3. Ask Document Q&A & Originality Checker
+                            item {
+                                Surface(
+                                    onClick = { showAskDocumentAndOriginalitySheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF8B5CF6).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = "🤖 اسأل المستند وفحص الأصالة",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF8B5CF6),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 4. Interactive Charts & Statistical Visualizer
+                            item {
+                                Surface(
+                                    onClick = { showChartsAndStatsSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF0EA5E9).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = "📊 الرسوم البيانية والإحصائيات",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0EA5E9),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 5. PDF Blackout Redaction & Digital Forensics
+                            item {
+                                Surface(
+                                    onClick = { showRedactionAndForensicsSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isPdfRedactionMode) Color(0xFFDC2626) else Color(0xFFDC2626).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = if (isPdfRedactionMode) "🛡️ وضع الطمس نشط (${pdfRedactions.size})" else "🛡️ طمس سري وفحص جنائي",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isPdfRedactionMode) Color.White else Color(0xFFDC2626),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 6. Smart Magnifier Loupe, Auto-Crop Margins & Laser Pointer
+                            if (extension == "pdf") {
+                                item {
+                                    Surface(
+                                        onClick = {
+                                            isMagnifierLoupeActive = !isMagnifierLoupeActive
+                                            if (isMagnifierLoupeActive) {
+                                                isPdfDrawingMode = false
+                                                isPdfRedactionMode = false
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isMagnifierLoupeActive) Color(0xFF1D4ED8) else Color(0xFF1D4ED8).copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = if (isMagnifierLoupeActive) "🔍 إيقاف العدسة 2.5x" else "🔍 عدسة مكبرة 2.5x",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isMagnifierLoupeActive) Color.White else Color(0xFF1D4ED8),
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+
+                                item {
+                                    Surface(
+                                        onClick = {
+                                            isPdfAutoCropMargins = !isPdfAutoCropMargins
+                                            Toast.makeText(
+                                                context,
+                                                if (isPdfAutoCropMargins) "تم تفعيل قص الهوامش البيضاء تلقائياً لتكبير النص ✂️" else "تم إرجاع الهوامش الأصلية للصفحة",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isPdfAutoCropMargins) Color(0xFF059669) else Color(0xFF059669).copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = if (isPdfAutoCropMargins) "✂️ قص الهوامش: مفعّل" else "✂️ قص الهوامش البيضاء",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isPdfAutoCropMargins) Color.White else Color(0xFF059669),
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (extension in listOf("pdf", "pptx", "ppt")) {
+                                item {
+                                    Surface(
+                                        onClick = {
+                                            isLaserPointerActive = !isLaserPointerActive
+                                            if (isLaserPointerActive) {
+                                                isPdfDrawingMode = false
+                                                isPdfRedactionMode = false
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isLaserPointerActive) Color(0xFFEF4444) else Color(0xFFEF4444).copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = if (isLaserPointerActive) "🔴 إيقاف مؤشر الليزر" else "🔴 مؤشر ليزر مسرحي",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isLaserPointerActive) Color.White else Color(0xFFEF4444),
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // =========================================================
+                            // ROUND 4: PRO DOCUMENT & RESEARCH WORKSTATION CHIPS
+                            // =========================================================
+
+                            // 1. PDF Visual Page Organizer & Splitter
+                            if (extension == "pdf") {
+                                item {
+                                    Surface(
+                                        onClick = { showPdfVisualOrganizerSheet = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF0284C7).copy(alpha = 0.16f)
+                                    ) {
+                                        Text(
+                                            text = "🧩 منظم صفحات PDF المرئي",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0284C7),
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 2. Arabic Linguistics, Auto-Tashkeel & Poetry Prosody Analyzer
+                            item {
+                                Surface(
+                                    onClick = { showArabicLinguisticsSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFD97706).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "🔤 التشكيل الآلي والعَروض",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFD97706),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 3. Interactive Timeline & Entity Extractor
+                            item {
+                                Surface(
+                                    onClick = { showTimelineAndEntitiesSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF059669).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "⏳ الخط الزمني والأعلام",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF059669),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 4. 3D Flip Flashcards & Auto MCQ Quiz Studio
+                            item {
+                                Surface(
+                                    onClick = { showQuizAnd3DFlashcardsSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF7C3AED).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "🎴 بطاقات 3D واختبار ذاتي",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF7C3AED),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 5. Official Digital Stamps & SHA-256 Certificate
+                            item {
+                                Surface(
+                                    onClick = { showOfficialStampAndCertSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF0D9488).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "🔐 الأختام وشهادة التوثيق",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0D9488),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 6. Page-Pinned Voice & Audio Notes
+                            item {
+                                Surface(
+                                    onClick = { showVoiceNotesSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFE11D48).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "🎙️ ملاحظات صوتية (${pageVoiceNotes.size})",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFE11D48),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 7. Back-of-Book Automated Alphabetical Indexer
+                            item {
+                                Surface(
+                                    onClick = { showBackOfBookIndexSheet = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF2563EB).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "📚 الكشاف الأبجدي (أ-ي)",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2563EB),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            // 8. Precision Alignment & Typographic Measurement Grid Overlay
+                            item {
+                                Surface(
+                                    onClick = { showAlignmentGridOverlay = !showAlignmentGridOverlay },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (showAlignmentGridOverlay) Color(0xFF4F46E5) else Color(0xFF4F46E5).copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        text = if (showAlignmentGridOverlay) "📐 إخفاء شبكة القياس" else "📐 شبكة القياس والمحاذاة",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (showAlignmentGridOverlay) Color.White else Color(0xFF4F46E5),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Crash / Interrupted Session Recovery Banner when available
+                    AnimatedVisibility(visible = pendingRecoveryCheckpoint != null) {
+                        pendingRecoveryCheckpoint?.let { checkpoint ->
+                            DocumentCrashRecoveryBanner(
+                                checkpoint = checkpoint,
+                                onRestore = {
+                                    val restored = DocumentVaultAndSaveManager.restoreFromRecoveryCheckpoint(
+                                        context = context,
+                                        uriString = effectiveUriString,
+                                        checkpoint = checkpoint
+                                    )
+                                    highlights = restored.highlights
+                                    bookmarks = restored.bookmarks
+                                    pdfInkStrokes = restored.inkStrokes
+                                    pdfStamps = restored.stamps
+                                    flashcards = restored.flashcards
+                                    customMindMapNodes = restored.mindMapNodes
+                                    pdfRedactions = restored.redactions
+                                    pageVoiceNotes = restored.voiceNotes
+                                    if (!restored.editedTextContent.isNullOrBlank()) {
+                                        textDocumentContent = restored.editedTextContent
+                                    }
+                                    pendingRecoveryCheckpoint = null
+                                    liveSaveState = LiveSaveState.SAVED
+                                    Toast.makeText(
+                                        context,
+                                        "✅ تمت استعادة كافة التعديلات والتظليلات من الجلسة السابقة بنجاح!",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                },
+                                onDismiss = {
+                                    DocumentVaultAndSaveManager.markSessionCleanOnNormalExit(context, effectiveUriString)
+                                    pendingRecoveryCheckpoint = null
+                                    liveSaveState = LiveSaveState.SAVED
+                                }
+                            )
                         }
                     }
 
@@ -1574,6 +2155,26 @@ fun MultiFormatDocumentViewerScreen(
                                                 MultiFormatDocumentEngine.savePdfStamps(context, uriString, updated)
                                             }
                                         )
+
+                                        // Round 3 Package 5: PDF Blackout Redaction Overlay
+                                        PdfRedactionOverlay(
+                                            currentPage = pdfCurrentPage,
+                                            redactions = pdfRedactions,
+                                            isRedactionModeActive = isPdfRedactionMode,
+                                            onAddRedaction = { newRedaction ->
+                                                val updated = pdfRedactions + newRedaction
+                                                pdfRedactions = updated
+                                                MultiFormatDocumentEngine.savePdfRedactions(context, uriString, updated)
+                                                Toast.makeText(context, "تم طمس المنطقة المحددة بالأسود السري 🛡️", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+
+                                        // Round 3 Package 6: Smart 2.5x Magnifier Loupe & Presenter Laser Pointer Overlay
+                                        SmartMagnifierAndLaserOverlay(
+                                            pdfBitmap = pdfBitmap,
+                                            isMagnifierLoupeActive = isMagnifierLoupeActive,
+                                            isLaserPointerActive = isLaserPointerActive
+                                        )
                                     }
                                 }
                             }
@@ -1706,6 +2307,13 @@ fun MultiFormatDocumentViewerScreen(
                                     }
                                 }
                             }
+
+                            // Presenter Laser Pointer Overlay on PPTX Slides
+                            SmartMagnifierAndLaserOverlay(
+                                pdfBitmap = null,
+                                isMagnifierLoupeActive = false,
+                                isLaserPointerActive = isLaserPointerActive
+                            )
                         } else {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text("لا توجد شرائح متوفرة في العرض التقديمي", color = Color.Gray)
@@ -1748,7 +2356,8 @@ fun MultiFormatDocumentViewerScreen(
                                         pendingFileToSave = outFile
                                         saveToDeviceLauncher.launch(outFile.name)
                                     }
-                                }
+                                },
+                                onOpenChartsStudio = { showChartsAndStatsSheet = true }
                             )
                         } else {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1999,6 +2608,14 @@ fun MultiFormatDocumentViewerScreen(
                     primaryColor = theme.primaryColor,
                     onUpdateYFraction = { focusRulerYFraction = it },
                     onCloseRuler = { showFocusRuler = false }
+                )
+            }
+
+            // Round 4 Package 8: Precision Alignment & Typographic Measurement Grid Overlay
+            if (showAlignmentGridOverlay) {
+                PrecisionAlignmentGridOverlay(
+                    primaryColor = theme.primaryColor,
+                    onCloseGrid = { showAlignmentGridOverlay = false }
                 )
             }
 
@@ -2738,6 +3355,364 @@ fun MultiFormatDocumentViewerScreen(
             onDismiss = { showFocusStudioDialog = false }
         )
     }
+
+    // =========================================================================
+    // ROUND 3: NEXT-GEN COGNITIVE & PUBLISHING SUITE SHEETS & DIALOGS
+    // =========================================================================
+
+    // 1. Interactive Document Mind Map Sheet
+    if (showMindMapSheet) {
+        InteractiveMindMapSheet(
+            documentName = fileName,
+            outlineItems = documentOutline,
+            highlights = highlights,
+            plainText = currentReadableText,
+            customNodes = customMindMapNodes,
+            onAddCustomNode = { title, subtitle, category ->
+                val newNode = DocumentMindMapNode(
+                    title = title,
+                    subtitle = subtitle,
+                    category = category,
+                    positionIndex = currentPositionIndex,
+                    parentId = "root_node",
+                    colorHex = "#10B981"
+                )
+                val updated = customMindMapNodes + newNode
+                customMindMapNodes = updated
+                MultiFormatDocumentEngine.saveCustomMindMapNodes(context, uriString, updated)
+            },
+            onDeleteCustomNode = { nodeId ->
+                val updated = customMindMapNodes.filter { it.id != nodeId }
+                customMindMapNodes = updated
+                MultiFormatDocumentEngine.saveCustomMindMapNodes(context, uriString, updated)
+            },
+            onJumpToPosition = { posIdx ->
+                when (extension) {
+                    "pdf" -> pdfCurrentPage = posIdx.coerceIn(0, (pdfTotalPages - 1).coerceAtLeast(0))
+                    "epub" -> epubCurrentChapterIndex = posIdx.coerceIn(0, ((epubBook?.chapters?.size ?: 1) - 1).coerceAtLeast(0))
+                    "pptx", "ppt" -> pptxCurrentSlideIndex = posIdx.coerceIn(0, ((pptxPresentation?.slides?.size ?: 1) - 1).coerceAtLeast(0))
+                    else -> coroutineScope.launch { textScrollState.scrollTo(posIdx.coerceAtLeast(0)) }
+                }
+            },
+            onExportMindMapToEditor = { markdownOutline ->
+                viewModel.insertAnnotationsAsNewChapter(
+                    chapterTitle = "خريطة ذهنية: ${fileName.substringBeforeLast(".")}",
+                    summaryText = markdownOutline
+                )
+                Toast.makeText(context, "تم تصدير الخريطة الذهنية كفصل مهيكل في محرر الكتابة 🕸️", Toast.LENGTH_LONG).show()
+            },
+            onDismiss = { showMindMapSheet = false }
+        )
+    }
+
+    // 2. RSVP Speed Reader Dialog (200 - 900 WPM)
+    if (showRsvpSpeedReaderDialog) {
+        RsvpSpeedReaderDialog(
+            documentTitle = fileName,
+            plainText = currentReadableText,
+            onDismiss = { showRsvpSpeedReaderDialog = false }
+        )
+    }
+
+    // 3. Ask Document Q&A & Originality / Plagiarism Overlap Checker Sheet
+    if (showAskDocumentAndOriginalitySheet) {
+        AskDocumentAndOriginalitySheet(
+            documentName = fileName,
+            plainText = currentReadableText,
+            outlineItems = documentOutline,
+            activeEditorChapterTitle = currentEditorChapter?.title ?: "",
+            activeEditorChapterContent = currentEditorChapter?.content ?: "",
+            onSendSnippetToEditor = { snippet ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = snippet,
+                    sourceFileName = fileName,
+                    positionLabel = currentPositionLabel,
+                    note = "إجابة مستخرجة عبر مُحاور المستند الذكي"
+                )
+                Toast.makeText(context, "تم إرسال الإجابة الموثقة إلى محرر الكتابة ✍️", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showAskDocumentAndOriginalitySheet = false }
+        )
+    }
+
+    // 4. Interactive Charts & Statistical Data Visualizer Sheet
+    if (showChartsAndStatsSheet) {
+        SpreadsheetChartsAndStatsSheet(
+            documentName = fileName,
+            spreadsheet = spreadsheetData,
+            plainText = currentReadableText,
+            onInsertStatsReportToEditor = { statsReport ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = statsReport,
+                    sourceFileName = fileName,
+                    positionLabel = currentPositionLabel,
+                    note = "تقرير إحصائي ومخطط بيانات"
+                )
+                Toast.makeText(context, "تم إدراج التقرير الإحصائي في مسودة محرر الكتابة 📊", Toast.LENGTH_LONG).show()
+            },
+            onDismiss = { showChartsAndStatsSheet = false }
+        )
+    }
+
+    // 5. PDF Blackout Redaction & Digital Forensics Sheet
+    if (showRedactionAndForensicsSheet) {
+        PdfRedactionAndForensicsSheet(
+            documentName = fileName,
+            documentUri = uri,
+            plainText = currentReadableText,
+            isPdfDocument = extension == "pdf",
+            isRedactionDrawingMode = isPdfRedactionMode,
+            onToggleRedactionDrawingMode = { enabled ->
+                isPdfRedactionMode = enabled
+                if (enabled) {
+                    isPdfDrawingMode = false
+                    isMagnifierLoupeActive = false
+                    isLaserPointerActive = false
+                    Toast.makeText(context, "وضع الطمس السري مفعّل: اسحب بإصبعك فوق النص لطمسه بالأسود 🛡️", Toast.LENGTH_LONG).show()
+                }
+            },
+            redactions = pdfRedactions,
+            onClearRedactions = {
+                pdfRedactions = emptyList()
+                MultiFormatDocumentEngine.savePdfRedactions(context, uriString, emptyList())
+                Toast.makeText(context, "تم مسح جميع مناطق الطمس", Toast.LENGTH_SHORT).show()
+            },
+            onExportSanitizedPdf = {
+                coroutineScope.launch {
+                    val outFile = withContext(Dispatchers.IO) {
+                        MultiFormatDocumentEngine.exportAnnotatedAndModifiedPdf(
+                            context = context,
+                            sourceUri = uri,
+                            sourceFileName = fileName,
+                            strokes = pdfInkStrokes,
+                            stamps = pdfStamps,
+                            pageRotations = pdfPageRotations,
+                            deletedPages = pdfDeletedPages,
+                            redactions = pdfRedactions
+                        )
+                    }
+                    if (outFile != null) {
+                        pendingFileToSave = outFile
+                        Toast.makeText(context, "تم دمج الطمس السري وتجهيز ملف PDF الآمن!", Toast.LENGTH_LONG).show()
+                        saveToDeviceLauncher.launch(outFile.name)
+                    }
+                }
+            },
+            onDismiss = { showRedactionAndForensicsSheet = false }
+        )
+    }
+
+    // =========================================================================
+    // ROUND 4: PRO DOCUMENT & RESEARCH WORKSTATION SHEETS & DIALOGS
+    // =========================================================================
+
+    // 1. PDF Visual Page Organizer & Splitter Sheet
+    if (showPdfVisualOrganizerSheet && extension == "pdf") {
+        PdfVisualPageOrganizerSheet(
+            documentUri = uri,
+            documentName = fileName,
+            totalPages = pdfTotalPages,
+            currentPageIndex = pdfCurrentPage,
+            initialRotations = pdfPageRotations,
+            initialDeletedPages = pdfDeletedPages,
+            onUpdateRotationsAndDeleted = { updatedRots, updatedDel ->
+                pdfPageRotations = updatedRots
+                pdfDeletedPages = updatedDel
+            },
+            onJumpToPage = { targetPage ->
+                pdfCurrentPage = targetPage.coerceIn(0, (pdfTotalPages - 1).coerceAtLeast(0))
+            },
+            onExportOrganizedPdfReady = { exportedFile ->
+                pendingFileToSave = exportedFile
+                Toast.makeText(context, "تم تجهيز ملف PDF المنظم (${exportedFile.name}) بنجاح!", Toast.LENGTH_LONG).show()
+                saveToDeviceLauncher.launch(exportedFile.name)
+            },
+            onDismiss = { showPdfVisualOrganizerSheet = false }
+        )
+    }
+
+    // 2. Arabic Linguistics, Auto-Tashkeel & Poetry Prosody Studio Sheet
+    if (showArabicLinguisticsSheet) {
+        ArabicLinguisticsAndProsodySheet(
+            documentName = fileName,
+            plainText = currentReadableText,
+            onSendProcessedTextToEditor = { processedText, noteLabel ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = processedText,
+                    sourceFileName = fileName,
+                    positionLabel = currentPositionLabel,
+                    note = noteLabel
+                )
+                Toast.makeText(context, "تم إرسال النص المعالج إلى محرر الكتابة ✍️", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showArabicLinguisticsSheet = false }
+        )
+    }
+
+    // 3. Interactive Timeline & Entity Extractor Sheet
+    if (showTimelineAndEntitiesSheet) {
+        InteractiveTimelineAndEntitiesSheet(
+            documentName = fileName,
+            plainText = currentReadableText,
+            onJumpToPosition = { posIdx ->
+                when (extension) {
+                    "pdf" -> pdfCurrentPage = posIdx.coerceIn(0, (pdfTotalPages - 1).coerceAtLeast(0))
+                    "epub" -> epubCurrentChapterIndex = posIdx.coerceIn(0, ((epubBook?.chapters?.size ?: 1) - 1).coerceAtLeast(0))
+                    "pptx", "ppt" -> pptxCurrentSlideIndex = posIdx.coerceIn(0, ((pptxPresentation?.slides?.size ?: 1) - 1).coerceAtLeast(0))
+                    else -> coroutineScope.launch {
+                        val approxScroll = (posIdx * 180).coerceIn(0, textScrollState.maxValue.coerceAtLeast(0))
+                        textScrollState.scrollTo(approxScroll)
+                    }
+                }
+            },
+            onSendToEditor = { snippet, note ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = snippet,
+                    sourceFileName = fileName,
+                    positionLabel = currentPositionLabel,
+                    note = note
+                )
+                Toast.makeText(context, "تم إرسال الحدث/العَلَم الموثق إلى محرر الكتابة ⏳", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showTimelineAndEntitiesSheet = false }
+        )
+    }
+
+    // 4. Interactive 3D Flip Flashcards & Auto MCQ Self-Test Quiz Sheet
+    if (showQuizAnd3DFlashcardsSheet) {
+        InteractiveQuizAnd3DFlashcardsSheet(
+            documentName = fileName,
+            plainText = currentReadableText,
+            flashcards = flashcards,
+            onUpdateFlashcards = { updated ->
+                flashcards = updated
+                MultiFormatDocumentEngine.saveDocumentFlashcards(context, uriString, updated)
+            },
+            onDismiss = { showQuizAnd3DFlashcardsSheet = false }
+        )
+    }
+
+    // 5. Official Digital Stamp & SHA-256 Verification Certificate Sheet
+    if (showOfficialStampAndCertSheet) {
+        OfficialDigitalStampAndCertificateSheet(
+            documentUri = uri,
+            documentName = fileName,
+            isPdfDocument = extension == "pdf",
+            plainText = currentReadableText,
+            onAddStampToCurrentPdfPage = { labelText, colorHex ->
+                val newStamp = PdfStampItem(
+                    pageIndex = pdfCurrentPage,
+                    label = labelText,
+                    xNorm = 0.25f,
+                    yNorm = 0.85f,
+                    colorHex = colorHex,
+                    isSignature = true
+                )
+                val updated = pdfStamps + newStamp
+                pdfStamps = updated
+                MultiFormatDocumentEngine.savePdfStamps(context, uriString, updated)
+            },
+            onExportCertifiedPdfReady = { exportedFile ->
+                pendingFileToSave = exportedFile
+                Toast.makeText(context, "تم إصدار ملف PDF الموثق بالشهادة والختم الرسمي!", Toast.LENGTH_LONG).show()
+                saveToDeviceLauncher.launch(exportedFile.name)
+            },
+            onDismiss = { showOfficialStampAndCertSheet = false }
+        )
+    }
+
+    // 6. Page-Pinned Voice & Audio Notes Sheet
+    if (showVoiceNotesSheet) {
+        PagePinnedVoiceNotesSheet(
+            uriString = uriString,
+            documentName = fileName,
+            currentPositionIndex = currentPositionIndex,
+            currentPositionLabel = currentPositionLabel,
+            voiceNotes = pageVoiceNotes,
+            onUpdateVoiceNotes = { updated ->
+                pageVoiceNotes = updated
+                MultiFormatDocumentEngine.savePageVoiceNotes(context, uriString, updated)
+            },
+            onReadNoteAloud = { textToSpeak ->
+                ttsManager.prepareText(textToSpeak)
+                ttsManager.play()
+                showTtsBar = true
+            },
+            onSendNoteToEditor = { transcript, label ->
+                viewModel.insertQuoteIntoActiveChapter(
+                    quoteText = transcript,
+                    sourceFileName = fileName,
+                    positionLabel = currentPositionLabel,
+                    note = label
+                )
+                Toast.makeText(context, "تم إرسال الملاحظة الصوتية إلى محرر الكتابة 🎙️", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showVoiceNotesSheet = false }
+        )
+    }
+
+    // 7. Back-of-Book Automated Alphabetical Indexer Sheet
+    if (showBackOfBookIndexSheet) {
+        BackOfBookIndexSheet(
+            documentName = fileName,
+            plainText = currentReadableText,
+            outlineItems = documentOutline,
+            onExportIndexToEditor = { markdownIndex ->
+                viewModel.insertAnnotationsAsNewChapter(
+                    chapterTitle = "الكشاف الأبجدي: ${effectiveFileName.substringBeforeLast(".")}",
+                    summaryText = markdownIndex
+                )
+                Toast.makeText(context, "تم إدراج الكشاف الأبجدي كفصل/ملحق في محرر الكتابة 📚", Toast.LENGTH_LONG).show()
+            },
+            onDismiss = { showBackOfBookIndexSheet = false }
+        )
+    }
+
+    // 8. Smart Save, Local Vault, Version History & .abdoc Bundle Center Sheet
+    if (showSaveAndVaultCenterSheet) {
+        DocumentSaveAndVaultCenterSheet(
+            theme = theme,
+            currentDocumentUri = uri,
+            currentDocumentName = effectiveFileName,
+            currentDocumentExtension = extension,
+            readableTextContent = currentReadableText,
+            highlights = highlights,
+            bookmarks = bookmarks,
+            inkStrokes = pdfInkStrokes,
+            stamps = pdfStamps,
+            redactions = pdfRedactions,
+            flashcards = flashcards,
+            mindMapNodes = customMindMapNodes,
+            voiceNotes = pageVoiceNotes,
+            pageRotations = pdfPageRotations,
+            deletedPages = pdfDeletedPages,
+            initialTab = saveAndVaultInitialTab,
+            onRestoreWorkspaceState = { restored ->
+                highlights = restored.highlights
+                bookmarks = restored.bookmarks
+                pdfInkStrokes = restored.inkStrokes
+                pdfStamps = restored.stamps
+                flashcards = restored.flashcards
+                customMindMapNodes = restored.mindMapNodes
+                pdfRedactions = restored.redactions
+                pageVoiceNotes = restored.voiceNotes
+                if (!restored.editedTextContent.isNullOrBlank()) {
+                    textDocumentContent = restored.editedTextContent
+                }
+                liveSaveState = LiveSaveState.SAVED
+                lastAutoSavedTimeText = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+            },
+            onOpenDocumentFromVaultOrBundle = { newUriStr, newDocName ->
+                activeUriOverride = newUriStr
+                activeFileNameOverride = newDocName
+            },
+            onDismiss = {
+                showSaveAndVaultCenterSheet = false
+                isDocumentInVault = DocumentVaultAndSaveManager.isDocumentInVault(context, effectiveUriString) != null
+                snapshotsCount = DocumentVaultAndSaveManager.getDocumentSnapshots(context, effectiveUriString).size
+            }
+        )
+    }
 }
 
 @Composable
@@ -3001,7 +3976,8 @@ private fun SpreadsheetGridView(
     theme: AppThemeData,
     readerTheme: ReaderTheme,
     onUpdateCell: (rowIndex: Int, colIndex: Int, newValue: String) -> Unit,
-    onExportXlsx: (isCsvConversion: Boolean) -> Unit
+    onExportXlsx: (isCsvConversion: Boolean) -> Unit,
+    onOpenChartsStudio: () -> Unit = {}
 ) {
     val horizontalScrollState = rememberScrollState()
     var editingCell by remember { mutableStateOf<Triple<Int, Int, String>?>(null) }
@@ -3034,27 +4010,39 @@ private fun SpreadsheetGridView(
                 )
             }
 
-            if (extension in listOf("csv", "tsv")) {
-                Button(
-                    onClick = { onExportXlsx(true) },
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalButton(
+                    onClick = onOpenChartsStudio,
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.BarChart, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("تحويل CSV إلى Excel وحفظه", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("الرسوم البيانية", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
-            } else {
-                Button(
-                    onClick = { onExportXlsx(false) },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("حفظ نسخة Excel جديدة", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+
+                if (extension in listOf("csv", "tsv")) {
+                    Button(
+                        onClick = { onExportXlsx(true) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("تحويل لـ Excel", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Button(
+                        onClick = { onExportXlsx(false) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("حفظ Excel", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

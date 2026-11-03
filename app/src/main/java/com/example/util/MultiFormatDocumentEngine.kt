@@ -112,6 +112,143 @@ data class SmartResearchAnalysis(
     val estimatedReadingMinutes: Int
 )
 
+data class DocumentMindMapNode(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val subtitle: String = "",
+    val category: String = "BRANCH", // ROOT, CHAPTER, CONCEPT, HIGHLIGHT, CUSTOM
+    val positionIndex: Int = 0,
+    val parentId: String? = null,
+    val colorHex: String = "#3B82F6"
+)
+
+data class PdfRedactionRect(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val pageIndex: Int,
+    val leftNorm: Float,
+    val topNorm: Float,
+    val rightNorm: Float,
+    val bottomNorm: Float,
+    val label: String = "محتوى مطموس سري"
+)
+
+data class DocumentQaAnswer(
+    val question: String,
+    val bestAnswerSnippet: String,
+    val positionLabel: String,
+    val positionIndex: Int = 0,
+    val confidencePct: Int,
+    val supportingPassages: List<Pair<String, String>> = emptyList()
+)
+
+data class OriginalityOverlapReport(
+    val originalityPct: Int,
+    val overlapPct: Int,
+    val sharedSentences: List<String>,
+    val totalCheckedSentences: Int,
+    val referenceWordCount: Int,
+    val draftWordCount: Int
+)
+
+data class DocumentForensicsReport(
+    val sha256Hash: String,
+    val fileSizeBytes: Long,
+    val wordCount: Int,
+    val uniqueWordCount: Int,
+    val lexicalDiversityPct: Int,
+    val avgSentenceLength: Int,
+    val readabilityScore: Int,
+    val readabilityLabel: String,
+    val topFrequentWords: List<Pair<String, Int>>
+)
+
+data class SpreadsheetColumnStats(
+    val columnIndex: Int,
+    val columnName: String,
+    val numericValues: List<Double>,
+    val labels: List<String>,
+    val sum: Double,
+    val average: Double,
+    val min: Double,
+    val max: Double,
+    val growthPct: Double
+)
+
+// ==========================================
+// ROUND 4 DATA MODELS
+// ==========================================
+
+data class PoeticVerseItem(
+    val index: Int,
+    val sadr: String,
+    val ajuz: String,
+    val pattern: String,
+    val endingLetters: String
+)
+
+data class PoetryProsodyReport(
+    val verses: List<PoeticVerseItem>,
+    val rawiyLetter: String,
+    val rhymeType: String,
+    val estimatedMeter: String,
+    val formattedTwoColumnText: String
+)
+
+data class TimelineEventItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val yearLabel: String,
+    val sortYear: Int,
+    val calendarType: String, // "هجري", "ميلادي", "حقبة/قرن"
+    val snippet: String,
+    val positionIndex: Int
+)
+
+data class ExtractedEntityItem(
+    val name: String,
+    val category: String, // "PERSON", "PLACE", "TERM"
+    val count: Int,
+    val sampleSnippet: String,
+    val positionIndex: Int
+)
+
+data class TimelineAndEntitiesReport(
+    val timelineEvents: List<TimelineEventItem>,
+    val people: List<ExtractedEntityItem>,
+    val places: List<ExtractedEntityItem>,
+    val keyTerms: List<ExtractedEntityItem>
+)
+
+data class McqQuizQuestion(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val question: String,
+    val options: List<String>,
+    val correctOptionIndex: Int,
+    val explanation: String,
+    val positionLabel: String = "مقتطف مرجعي"
+)
+
+data class BackOfBookIndexEntry(
+    val term: String,
+    val firstLetter: Char,
+    val count: Int,
+    val locations: List<String>,
+    val sampleContext: String
+)
+
+data class PageVoiceNoteItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val uriString: String,
+    val pageOrSectionIndex: Int,
+    val positionLabel: String,
+    val title: String,
+    val transcriptOrSummary: String,
+    val durationSeconds: Int,
+    val audioFilePath: String = "",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+
+
 
 enum class DocumentCategory(val displayName: String, val icon: String) {
     ALL("الكل", "📁"),
@@ -1402,7 +1539,8 @@ object MultiFormatDocumentEngine {
         pageRotations: Map<Int, Float>,
         deletedPages: Set<Int>,
         watermarkText: String = "",
-        addPageNumbers: Boolean = true
+        addPageNumbers: Boolean = true,
+        redactions: List<PdfRedactionRect> = emptyList()
     ): File? {
         var pfd: ParcelFileDescriptor? = null
         var renderer: PdfRenderer? = null
@@ -1499,6 +1637,29 @@ object MultiFormatDocumentEngine {
                     )
                     canvas.drawRoundRect(rect, 8f, 8f, boxPaint)
                     canvas.drawText(st.label, cx, cy, textPaint)
+                }
+
+                // Draw Permanent Blackout Redactions for this page
+                val pageRedactions = redactions.filter { it.pageIndex == pageIdx }
+                if (pageRedactions.isNotEmpty()) {
+                    val redactPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.BLACK
+                        style = android.graphics.Paint.Style.FILL
+                    }
+                    val borderPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                        color = Color.rgb(30, 41, 59)
+                        style = android.graphics.Paint.Style.STROKE
+                        strokeWidth = 1.5f
+                    }
+                    for (red in pageRedactions) {
+                        val l = (minOf(red.leftNorm, red.rightNorm) * pageW).coerceIn(0f, pageW.toFloat())
+                        val r = (maxOf(red.leftNorm, red.rightNorm) * pageW).coerceIn(0f, pageW.toFloat())
+                        val t = (minOf(red.topNorm, red.bottomNorm) * pageH).coerceIn(0f, pageH.toFloat())
+                        val b = (maxOf(red.topNorm, red.bottomNorm) * pageH).coerceIn(0f, pageH.toFloat())
+                        val rect = android.graphics.RectF(l, t, r, b)
+                        canvas.drawRect(rect, redactPaint)
+                        canvas.drawRect(rect, borderPaint)
+                    }
                 }
 
                 // Draw Watermark if specified
@@ -1841,4 +2002,1532 @@ object MultiFormatDocumentEngine {
         }
         return result
     }
+
+    // =========================================================================
+    // ROUND 3: NEXT-GEN COGNITIVE & PUBLISHING SUITE ENGINE
+    // =========================================================================
+
+    /**
+     * 1. Interactive Document Mind Map Generator & Persistence
+     */
+    fun generateDocumentMindMap(
+        documentTitle: String,
+        outlineItems: List<DocumentOutlineItem>,
+        highlights: List<DocumentHighlightItem>,
+        plainText: String,
+        customNodes: List<DocumentMindMapNode>
+    ): List<DocumentMindMapNode> {
+        val nodes = mutableListOf<DocumentMindMapNode>()
+        val rootId = "root_node"
+        val cleanTitle = documentTitle.substringBeforeLast(".").take(38).ifBlank { "المستند المفتوح" }
+        nodes.add(
+            DocumentMindMapNode(
+                id = rootId,
+                title = cleanTitle,
+                subtitle = "الجذر الرئيسي للمستند",
+                category = "ROOT",
+                positionIndex = 0,
+                parentId = null,
+                colorHex = "#2563EB"
+            )
+        )
+
+        // Add Outline / Chapters branch
+        val chaptersToUse = if (outlineItems.isNotEmpty()) {
+            outlineItems.take(8)
+        } else {
+            extractDocumentOutline(
+                extension = "txt",
+                epubBook = null,
+                pptxPresentation = null,
+                docxParagraphs = emptyList(),
+                textDocumentContent = plainText,
+                pdfTotalPages = 0
+            ).take(6)
+        }
+
+        chaptersToUse.forEachIndexed { idx, item ->
+            val chapId = "chap_$idx"
+            nodes.add(
+                DocumentMindMapNode(
+                    id = chapId,
+                    title = item.title.take(36),
+                    subtitle = item.subtitle.ifBlank { "قسم #${idx + 1}" },
+                    category = "CHAPTER",
+                    positionIndex = item.positionIndex,
+                    parentId = rootId,
+                    colorHex = "#0EA5E9"
+                )
+            )
+        }
+
+        // Add Key Concepts from Research Analysis
+        val analysis = analyzeTextForSmartResearch(plainText, documentTitle)
+        analysis.keyConcepts.take(6).forEachIndexed { idx, concept ->
+            val parentChap = nodes.filter { it.category == "CHAPTER" }.getOrNull(idx % nodes.count { it.category == "CHAPTER" }.coerceAtLeast(1))
+            nodes.add(
+                DocumentMindMapNode(
+                    id = "concept_$idx",
+                    title = concept.take(28),
+                    subtitle = "مفهوم محوري",
+                    category = "CONCEPT",
+                    positionIndex = parentChap?.positionIndex ?: 0,
+                    parentId = parentChap?.id ?: rootId,
+                    colorHex = "#8B5CF6"
+                )
+            )
+        }
+
+        // Add User Highlights
+        highlights.take(6).forEachIndexed { idx, hl ->
+            nodes.add(
+                DocumentMindMapNode(
+                    id = "hl_${hl.id}",
+                    title = hl.snippetText.take(34),
+                    subtitle = hl.positionLabel,
+                    category = "HIGHLIGHT",
+                    positionIndex = hl.positionIndex,
+                    parentId = rootId,
+                    colorHex = "#F59E0B"
+                )
+            )
+        }
+
+        // Append custom user-added Mind Map nodes
+        for (custom in customNodes) {
+            nodes.add(
+                if (custom.parentId.isNullOrBlank()) custom.copy(parentId = rootId) else custom
+            )
+        }
+
+        return nodes
+    }
+
+    fun getCustomMindMapNodes(context: Context, uriString: String): List<DocumentMindMapNode> {
+        val prefs = context.getSharedPreferences("doc_viewer_prefs", Context.MODE_PRIVATE)
+        val raw = prefs.getString("mindmap_nodes_${uriString.hashCode()}", null) ?: return emptyList()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("||")
+            if (parts.size >= 6) {
+                DocumentMindMapNode(
+                    id = parts[0],
+                    title = parts[1],
+                    subtitle = parts[2],
+                    category = parts[3],
+                    positionIndex = parts[4].toIntOrNull() ?: 0,
+                    parentId = parts[5].ifBlank { "root_node" },
+                    colorHex = parts.getOrNull(6) ?: "#10B981"
+                )
+            } else null
+        }
+    }
+
+    fun saveCustomMindMapNodes(context: Context, uriString: String, nodes: List<DocumentMindMapNode>) {
+        val prefs = context.getSharedPreferences("doc_viewer_prefs", Context.MODE_PRIVATE)
+        val serialized = nodes.joinToString("\n") { n ->
+            val cleanTitle = n.title.replace("||", " ").replace("\n", " ")
+            val cleanSub = n.subtitle.replace("||", " ").replace("\n", " ")
+            "${n.id}||$cleanTitle||$cleanSub||${n.category}||${n.positionIndex}||${n.parentId ?: "root_node"}||${n.colorHex}"
+        }
+        prefs.edit().putString("mindmap_nodes_${uriString.hashCode()}", serialized).apply()
+    }
+
+    fun formatMindMapAsChapterOutline(documentName: String, nodes: List<DocumentMindMapNode>): String {
+        val sb = StringBuilder()
+        sb.appendLine("# الخريطة الذهنية والهيكل الموضوعي: $documentName")
+        sb.appendLine()
+        val root = nodes.firstOrNull { it.category == "ROOT" }
+        if (root != null) {
+            sb.appendLine("## 🎯 المحور المركزي: ${root.title}")
+            sb.appendLine()
+        }
+        val chapters = nodes.filter { it.category == "CHAPTER" }
+        if (chapters.isNotEmpty()) {
+            sb.appendLine("### 📑 الفصول والأقسام الرئيسية:")
+            chapters.forEachIndexed { idx, ch ->
+                sb.appendLine("${idx + 1}. **${ch.title}** (${ch.subtitle})")
+                val children = nodes.filter { it.parentId == ch.id && it.id != ch.id }
+                children.forEach { child ->
+                    sb.appendLine("   - 🔹 ${child.title} [${child.subtitle}]")
+                }
+            }
+            sb.appendLine()
+        }
+        val highlights = nodes.filter { it.category == "HIGHLIGHT" }
+        if (highlights.isNotEmpty()) {
+            sb.appendLine("### ✨ الاقتباسات والشواهد المرتبطة:")
+            highlights.forEach { hl ->
+                sb.appendLine("- «${hl.title}» (${hl.subtitle})")
+            }
+            sb.appendLine()
+        }
+        val customs = nodes.filter { it.category == "CUSTOM" }
+        if (customs.isNotEmpty()) {
+            sb.appendLine("### 💡 الفروع والأفكار الإضافية:")
+            customs.forEach { c ->
+                sb.appendLine("- **${c.title}**: ${c.subtitle}")
+            }
+        }
+        return sb.toString().trim()
+    }
+
+    /**
+     * 2. Ask Document Q&A (Semantic & Lexical Passage Retrieval)
+     */
+    fun askDocumentQuestion(
+        question: String,
+        plainText: String,
+        outlineItems: List<DocumentOutlineItem> = emptyList()
+    ): DocumentQaAnswer {
+        val cleanQuestion = question.trim()
+        if (cleanQuestion.isBlank() || plainText.isBlank()) {
+            return DocumentQaAnswer(
+                question = cleanQuestion,
+                bestAnswerSnippet = "الرجاء كتابة سؤال واضح ليتم البحث في فقرات المستند واستخراج الإجابة الدقيقة.",
+                positionLabel = "بداية المستند",
+                positionIndex = 0,
+                confidencePct = 0
+            )
+        }
+
+        val stopWords = setOf(
+            "ما", "ماذا", "هل", "كيف", "أين", "متى", "لماذا", "كم", "من", "في", "على", "إلى", "عن",
+            "هو", "هي", "هم", "كان", "كانت", "هذا", "هذه", "ذلك", "تلك", "التي", "الذي", "مع", "أو",
+            "بين", "كل", "بعض", "حول", "اذكر", "اشرح", "وضح", "ماهي", "ماهو", "what", "how", "why",
+            "where", "when", "who", "the", "and", "for", "with", "from", "that", "this"
+        )
+
+        val queryTokens = cleanQuestion
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .lowercase()
+            .split(Regex("\\s+"))
+            .map { it.removePrefix("ال") }
+            .filter { it.length >= 2 && it !in stopWords }
+            .distinct()
+
+        val rawParagraphs = plainText
+            .split(Regex("\\n\\s*\\n|\\n"))
+            .map { it.trim() }
+            .filter { it.length >= 25 }
+
+        if (rawParagraphs.isEmpty()) {
+            return DocumentQaAnswer(
+                question = cleanQuestion,
+                bestAnswerSnippet = plainText.take(320),
+                positionLabel = "المقطع الأول",
+                positionIndex = 0,
+                confidencePct = 65
+            )
+        }
+
+        data class ScoredPara(val index: Int, val text: String, val score: Double)
+
+        val scored = rawParagraphs.mapIndexed { idx, para ->
+            val lowerPara = para.lowercase()
+            var hits = 0.0
+            for (token in queryTokens) {
+                if (lowerPara.contains(token)) {
+                    hits += 2.5
+                    // Bonus for exact word match
+                    if (Regex("\\b${Regex.escape(token)}\\b").containsMatchIn(lowerPara)) {
+                        hits += 1.5
+                    }
+                }
+            }
+            // Bonus if paragraph has numbers when asking "كم / متى"
+            if ((cleanQuestion.contains("كم") || cleanQuestion.contains("متى") || cleanQuestion.contains("نسبة")) &&
+                para.any { it.isDigit() }
+            ) {
+                hits += 1.8
+            }
+            // Length normalization
+            val normScore = if (queryTokens.isEmpty()) 1.0 else (hits / (queryTokens.size * 3.0))
+            ScoredPara(idx, para, normScore)
+        }.sortedByDescending { it.score }
+
+        val best = scored.first()
+        val topSupporting = scored.take(4).filter { it.score > 0.0 || it == best }.mapIndexed { rank, item ->
+            val approxSection = outlineItems.lastOrNull { it.positionIndex <= item.index }?.title
+                ?: "فقرة رقم ${item.index + 1}"
+            Pair(approxSection, item.text.take(260))
+        }
+
+        val confidence = if (best.score <= 0.05) {
+            58
+        } else {
+            (55 + (best.score * 42).toInt()).coerceIn(62, 98)
+        }
+
+        val posLabel = outlineItems.lastOrNull { it.positionIndex <= best.index }?.title
+            ?: "فقرة #${best.index + 1} من ${rawParagraphs.size}"
+
+        return DocumentQaAnswer(
+            question = cleanQuestion,
+            bestAnswerSnippet = best.text.take(420),
+            positionLabel = posLabel,
+            positionIndex = best.index,
+            confidencePct = confidence,
+            supportingPassages = topSupporting
+        )
+    }
+
+    /**
+     * 3. Originality & Plagiarism / Overlap Checker (Compares Reference Document vs Editor Draft)
+     */
+    fun checkOriginalityAndOverlap(
+        referenceText: String,
+        draftText: String
+    ): OriginalityOverlapReport {
+        val cleanRef = referenceText.trim()
+        val cleanDraft = draftText.trim()
+        val refWords = cleanRef.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val draftWords = cleanDraft.split(Regex("\\s+")).filter { it.isNotBlank() }
+
+        if (cleanDraft.isBlank() || cleanRef.isBlank()) {
+            return OriginalityOverlapReport(
+                originalityPct = 100,
+                overlapPct = 0,
+                sharedSentences = emptyList(),
+                totalCheckedSentences = 0,
+                referenceWordCount = refWords.size,
+                draftWordCount = draftWords.size
+            )
+        }
+
+        // Build 4-word shingles from reference text
+        val refNormalizedWords = refWords.map {
+            it.replace(Regex("[^\\p{L}\\p{N}]"), "").lowercase()
+        }.filter { it.length >= 2 }
+
+        val refShingles = HashSet<String>()
+        for (i in 0..(refNormalizedWords.size - 4)) {
+            refShingles.add(refNormalizedWords.subList(i, i + 4).joinToString(" "))
+        }
+
+        val draftSentences = cleanDraft
+            .split(Regex("[.!؟\\n]+"))
+            .map { it.trim() }
+            .filter { it.split(Regex("\\s+")).size >= 4 }
+
+        if (draftSentences.isEmpty()) {
+            return OriginalityOverlapReport(
+                originalityPct = 100,
+                overlapPct = 0,
+                sharedSentences = emptyList(),
+                totalCheckedSentences = 1,
+                referenceWordCount = refWords.size,
+                draftWordCount = draftWords.size
+            )
+        }
+
+        val overlappingSentences = mutableListOf<String>()
+        for (sentence in draftSentences) {
+            val sWords = sentence.split(Regex("\\s+"))
+                .map { it.replace(Regex("[^\\p{L}\\p{N}]"), "").lowercase() }
+                .filter { it.length >= 2 }
+            if (sWords.size < 4) continue
+
+            var matchedShingles = 0
+            val totalShingles = (sWords.size - 3).coerceAtLeast(1)
+            for (i in 0..(sWords.size - 4)) {
+                val shingle = sWords.subList(i, i + 4).joinToString(" ")
+                if (shingle in refShingles) {
+                    matchedShingles++
+                }
+            }
+            if (matchedShingles > 0 || cleanRef.contains(sentence.take(35))) {
+                overlappingSentences.add(sentence)
+            }
+        }
+
+        val overlapRatio = (overlappingSentences.size.toDouble() / draftSentences.size.toDouble())
+        val overlapPct = (overlapRatio * 100).toInt().coerceIn(0, 100)
+        val originalityPct = (100 - overlapPct).coerceIn(0, 100)
+
+        return OriginalityOverlapReport(
+            originalityPct = originalityPct,
+            overlapPct = overlapPct,
+            sharedSentences = overlappingSentences.take(10),
+            totalCheckedSentences = draftSentences.size,
+            referenceWordCount = refWords.size,
+            draftWordCount = draftWords.size
+        )
+    }
+
+    /**
+     * 4. Spreadsheet & Document Statistical Data Visualizer
+     */
+    fun analyzeSpreadsheetColumnStats(sheet: SpreadsheetContent): List<SpreadsheetColumnStats> {
+        val results = mutableListOf<SpreadsheetColumnStats>()
+        val colCount = maxOf(sheet.headers.size, sheet.rows.maxOfOrNull { it.size } ?: 0)
+        if (colCount == 0) return emptyList()
+
+        for (colIdx in 0 until colCount) {
+            val colName = sheet.headers.getOrNull(colIdx)?.takeIf { it.isNotBlank() } ?: "عمود ${colIdx + 1}"
+            val values = mutableListOf<Double>()
+            val labels = mutableListOf<String>()
+
+            for ((rowIdx, row) in sheet.rows.withIndex()) {
+                val rawCell = row.getOrNull(colIdx)?.trim() ?: continue
+                // Strip currency symbols, commas, percent signs
+                val cleanedNum = rawCell.replace(Regex("[^0-9.-]"), "")
+                val parsed = cleanedNum.toDoubleOrNull()
+                if (parsed != null) {
+                    values.add(parsed)
+                    val rowLabel = row.firstOrNull()?.takeIf { it.isNotBlank() && colIdx != 0 }
+                        ?: "صف ${rowIdx + 1}"
+                    labels.add(rowLabel.take(16))
+                }
+            }
+
+            if (values.isNotEmpty()) {
+                val sum = values.sum()
+                val avg = sum / values.size
+                val min = values.minOrNull() ?: 0.0
+                val max = values.maxOrNull() ?: 0.0
+                val firstVal = values.first()
+                val lastVal = values.last()
+                val growthPct = if (kotlin.math.abs(firstVal) > 0.0001 && values.size >= 2) {
+                    ((lastVal - firstVal) / kotlin.math.abs(firstVal)) * 100.0
+                } else 0.0
+
+                results.add(
+                    SpreadsheetColumnStats(
+                        columnIndex = colIdx,
+                        columnName = colName,
+                        numericValues = values,
+                        labels = labels,
+                        sum = sum,
+                        average = avg,
+                        min = min,
+                        max = max,
+                        growthPct = growthPct
+                    )
+                )
+            }
+        }
+        return results
+    }
+
+    /**
+     * Extracts numeric series from any text document when no spreadsheet is active,
+     * allowing interactive charting of numbers/statistics inside reports and books.
+     */
+    fun extractNumericStatsFromPlainText(plainText: String, documentTitle: String): List<SpreadsheetColumnStats> {
+        val numberRegex = Regex("(-?\\d+(?:\\.\\d+)?)")
+        val lines = plainText.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val values = mutableListOf<Double>()
+        val labels = mutableListOf<String>()
+
+        for (line in lines) {
+            val matches = numberRegex.findAll(line).mapNotNull { it.value.toDoubleOrNull() }.toList()
+            if (matches.isNotEmpty()) {
+                val num = matches.first()
+                val label = line.replace(numberRegex, "").trim().take(16).ifBlank { "عنصر ${values.size + 1}" }
+                values.add(num)
+                labels.add(label)
+                if (values.size >= 16) break
+            }
+        }
+
+        // Also provide word length distribution by paragraphs as a secondary analytical chart
+        val paragraphs = plainText.split(Regex("\\n\\s*\\n|\\n")).map { it.trim() }.filter { it.length >= 20 }.take(12)
+        val paraWordCounts = paragraphs.map { it.split(Regex("\\s+")).size.toDouble() }
+        val paraLabels = paragraphs.mapIndexed { idx, _ -> "فقرة ${idx + 1}" }
+
+        val list = mutableListOf<SpreadsheetColumnStats>()
+        if (values.size >= 2) {
+            val sum = values.sum()
+            val firstVal = values.first()
+            val lastVal = values.last()
+            val growth = if (kotlin.math.abs(firstVal) > 0.0001) ((lastVal - firstVal) / kotlin.math.abs(firstVal)) * 100.0 else 0.0
+            list.add(
+                SpreadsheetColumnStats(
+                    columnIndex = 0,
+                    columnName = "القيم الرقمية في المستند",
+                    numericValues = values,
+                    labels = labels,
+                    sum = sum,
+                    average = sum / values.size,
+                    min = values.minOrNull() ?: 0.0,
+                    max = values.maxOrNull() ?: 0.0,
+                    growthPct = growth
+                )
+            )
+        }
+        if (paraWordCounts.isNotEmpty()) {
+            val sum = paraWordCounts.sum()
+            val firstVal = paraWordCounts.first()
+            val lastVal = paraWordCounts.last()
+            val growth = if (kotlin.math.abs(firstVal) > 0.0001 && paraWordCounts.size >= 2) ((lastVal - firstVal) / kotlin.math.abs(firstVal)) * 100.0 else 0.0
+            list.add(
+                SpreadsheetColumnStats(
+                    columnIndex = 1,
+                    columnName = "كثافة الكلمات عبر الفقرات",
+                    numericValues = paraWordCounts,
+                    labels = paraLabels,
+                    sum = sum,
+                    average = sum / paraWordCounts.size,
+                    min = paraWordCounts.minOrNull() ?: 0.0,
+                    max = paraWordCounts.maxOrNull() ?: 0.0,
+                    growthPct = growth
+                )
+            )
+        }
+        return list
+    }
+
+    /**
+     * 5. PDF Redaction Persistence & Digital Forensics / SHA-256 Inspector
+     */
+    fun getPdfRedactions(context: Context, uriString: String): List<PdfRedactionRect> {
+        val prefs = context.getSharedPreferences("doc_viewer_prefs", Context.MODE_PRIVATE)
+        val raw = prefs.getString("pdf_redactions_${uriString.hashCode()}", null) ?: return emptyList()
+        return raw.split("\n").mapNotNull { line ->
+            val p = line.split("||")
+            if (p.size >= 6) {
+                PdfRedactionRect(
+                    id = p[0],
+                    pageIndex = p[1].toIntOrNull() ?: 0,
+                    leftNorm = p[2].toFloatOrNull() ?: 0.1f,
+                    topNorm = p[3].toFloatOrNull() ?: 0.1f,
+                    rightNorm = p[4].toFloatOrNull() ?: 0.4f,
+                    bottomNorm = p[5].toFloatOrNull() ?: 0.2f,
+                    label = p.getOrNull(6) ?: "محتوى مطموس سري"
+                )
+            } else null
+        }
+    }
+
+    fun savePdfRedactions(context: Context, uriString: String, redactions: List<PdfRedactionRect>) {
+        val prefs = context.getSharedPreferences("doc_viewer_prefs", Context.MODE_PRIVATE)
+        val serialized = redactions.joinToString("\n") { r ->
+            "${r.id}||${r.pageIndex}||${r.leftNorm}||${r.topNorm}||${r.rightNorm}||${r.bottomNorm}||${r.label.replace("||", " ")}"
+        }
+        prefs.edit().putString("pdf_redactions_${uriString.hashCode()}", serialized).apply()
+    }
+
+    fun computeDocumentForensics(
+        context: Context,
+        uri: Uri?,
+        plainText: String
+    ): DocumentForensicsReport {
+        var sha256Hex = "غير متاح"
+        var sizeBytes = 0L
+
+        if (uri != null) {
+            try {
+                val md = java.security.MessageDigest.getInstance("SHA-256")
+                val inputStream = if (uri.scheme == "file") {
+                    File(uri.path ?: "").takeIf { it.exists() }?.inputStream()
+                } else {
+                    context.contentResolver.openInputStream(uri)
+                }
+                inputStream?.use { stream ->
+                    val buffer = ByteArray(8192)
+                    var read: Int
+                    while (stream.read(buffer).also { read = it } != -1) {
+                        md.update(buffer, 0, read)
+                        sizeBytes += read
+                    }
+                }
+                val digest = md.digest()
+                sha256Hex = digest.joinToString("") { "%02x".format(it) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        val words = plainText
+            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
+            .split(Regex("\\s+"))
+            .filter { it.length >= 2 }
+
+        val wordCount = words.size
+        val lowerWords = words.map { it.lowercase() }
+        val uniqueWords = lowerWords.toSet().size
+        val lexicalDiversityPct = if (wordCount > 0) {
+            ((uniqueWords.toDouble() / wordCount.toDouble()) * 100.0).toInt().coerceIn(1, 100)
+        } else 0
+
+        val sentences = plainText.split(Regex("[.!؟\\n]+")).map { it.trim() }.filter { it.isNotBlank() }
+        val avgSentenceLength = if (sentences.isNotEmpty()) (wordCount / sentences.size).coerceAtLeast(1) else wordCount
+
+        // Arabic/Multilingual Readability Index (0..100)
+        val avgWordLength = if (words.isNotEmpty()) words.sumOf { it.length }.toDouble() / words.size else 5.0
+        val rawReadability = (100.0 - (avgSentenceLength * 1.35) - ((avgWordLength - 4.0).coerceAtLeast(0.0) * 6.5)).toInt()
+        val readabilityScore = rawReadability.coerceIn(18, 98)
+        val readabilityLabel = when {
+            readabilityScore >= 80 -> "سهل وسلس جداً (مناسب لعموم القراء)"
+            readabilityScore >= 60 -> "متوازن وواضح (أدبي / ثقافي عام)"
+            readabilityScore >= 40 -> "متقدم (أكاديمي / تخصصي رصين)"
+            else -> "مركّب وعميق جداً (بحثي / قانوني دقيق)"
+        }
+
+        val stopWords = setOf(
+            "في", "من", "على", "إلى", "عن", "مع", "هذا", "هذه", "ذلك", "تلك", "التي", "الذي",
+            "كان", "كانت", "هو", "هي", "هم", "أو", "ثم", "بل", "لا", "ما", "إن", "أن", "قد",
+            "كل", "بعض", "بين", "عند", "غير", "فوق", "تحت", "ال", "the", "and", "for", "with", "that"
+        )
+        val topFrequent = lowerWords
+            .filter { it.length >= 3 && it !in stopWords }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(8)
+            .map { Pair(it.key, it.value) }
+
+        return DocumentForensicsReport(
+            sha256Hash = sha256Hex,
+            fileSizeBytes = sizeBytes,
+            wordCount = wordCount,
+            uniqueWordCount = uniqueWords,
+            lexicalDiversityPct = lexicalDiversityPct,
+            avgSentenceLength = avgSentenceLength,
+            readabilityScore = readabilityScore,
+            readabilityLabel = readabilityLabel,
+            topFrequentWords = topFrequent
+        )
+    }
+
+    /**
+     * 6. Auto-Crop White Margins on PDF Bitmap
+     * Detects excess outer white margins and crops the bitmap with a clean 2% breathing pad.
+     */
+    fun cropPdfBitmapWhitespace(source: Bitmap): Bitmap {
+        return try {
+            val w = source.width
+            val h = source.height
+            if (w < 80 || h < 80) return source
+
+            val stepX = (w / 120).coerceAtLeast(2)
+            val stepY = (h / 160).coerceAtLeast(2)
+            val threshold = 244 // RGB values below 244 count as ink/content
+
+            var minX = w
+            var maxX = 0
+            var minY = h
+            var maxY = 0
+
+            for (y in 0 until h step stepY) {
+                for (x in 0 until w step stepX) {
+                    val pixel = source.getPixel(x, y)
+                    val r = Color.red(pixel)
+                    val g = Color.green(pixel)
+                    val b = Color.blue(pixel)
+                    if (r < threshold || g < threshold || b < threshold) {
+                        if (x < minX) minX = x
+                        if (x > maxX) maxX = x
+                        if (y < minY) minY = y
+                        if (y > maxY) maxY = y
+                    }
+                }
+            }
+
+            if (maxX <= minX + 40 || maxY <= minY + 40) {
+                return source
+            }
+
+            val padX = (w * 0.025f).toInt()
+            val padY = (h * 0.025f).toInt()
+            val cropLeft = (minX - padX).coerceAtLeast(0)
+            val cropTop = (minY - padY).coerceAtLeast(0)
+            val cropRight = (maxX + padX).coerceAtMost(w)
+            val cropBottom = (maxY + padY).coerceAtMost(h)
+
+            val cropW = cropRight - cropLeft
+            val cropH = cropBottom - cropTop
+            if (cropW <= 50 || cropH <= 50 || (cropW > w * 0.96f && cropH > h * 0.96f)) {
+                source
+            } else {
+                Bitmap.createBitmap(source, cropLeft, cropTop, cropW, cropH)
+            }
+        } catch (e: Exception) {
+            source
+        }
+    }
+
+    // =========================================================================
+    // ROUND 4: PRO DOCUMENT & RESEARCH WORKSTATION ENGINE
+    // =========================================================================
+
+    /**
+     * 1. PDF Visual Page Organizer: Export Custom Reordered / Split / Rotated Page Sequence
+     */
+    fun exportCustomOrganizedPdf(
+        context: Context,
+        sourceUri: Uri,
+        sourceFileName: String,
+        orderedPageIndices: List<Int>,
+        pageRotations: Map<Int, Float>,
+        suffixLabel: String = "organized"
+    ): File? {
+        var pfd: ParcelFileDescriptor? = null
+        var renderer: PdfRenderer? = null
+        return try {
+            pfd = openParcelFileDescriptor(context, sourceUri) ?: return null
+            renderer = PdfRenderer(pfd)
+            val totalPages = renderer.pageCount
+            val validIndices = orderedPageIndices.filter { it in 0 until totalPages }
+            if (validIndices.isEmpty()) return null
+
+            val pdfDoc = android.graphics.pdf.PdfDocument()
+            for ((outIdx, srcPageIdx) in validIndices.withIndex()) {
+                val page = renderer.openPage(srcPageIdx)
+                val rot = ((pageRotations[srcPageIdx] ?: 0f).toInt() % 360 + 360) % 360
+                val isSwapped = rot == 90 || rot == 270
+                val srcW = (page.width * 1.5f).toInt().coerceAtLeast(600)
+                val srcH = (page.height * 1.5f).toInt().coerceAtLeast(800)
+
+                val rawBitmap = Bitmap.createBitmap(srcW, srcH, Bitmap.Config.ARGB_8888)
+                rawBitmap.eraseColor(Color.WHITE)
+                page.render(rawBitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                page.close()
+
+                val finalBitmap = if (rot != 0) {
+                    val matrix = android.graphics.Matrix().apply { postRotate(rot.toFloat()) }
+                    Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true)
+                } else {
+                    rawBitmap
+                }
+
+                val outW = if (isSwapped) srcH else srcW
+                val outH = if (isSwapped) srcW else srcH
+                val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(outW, outH, outIdx + 1).create()
+                val outPage = pdfDoc.startPage(pageInfo)
+                outPage.canvas.drawBitmap(finalBitmap, 0f, 0f, null)
+                pdfDoc.finishPage(outPage)
+            }
+
+            val baseName = sourceFileName.substringBeforeLast(".").ifBlank { "document" }
+            val outDir = File(context.cacheDir, "converted_docs").apply { mkdirs() }
+            val outFile = File(outDir, "${baseName}_${suffixLabel}_${System.currentTimeMillis() % 10000}.pdf")
+            FileOutputStream(outFile).use { pdfDoc.writeTo(it) }
+            pdfDoc.close()
+            outFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            try { renderer?.close() } catch (_: Exception) {}
+            try { pfd?.close() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * 2. Arabic Linguistics Studio: Auto-Tashkeel, Strip Diacritics, Hamza Normalization & Poetry Prosody Analyzer
+     */
+    fun stripArabicDiacritics(text: String): String {
+        // Strips Harakat (U+064B..U+065F, U+0670) and Tatweel (U+0640)
+        return text.replace(Regex("[\\u064B-\\u065F\\u0670\\u0640]"), "")
+    }
+
+    fun normalizeArabicText(text: String): String {
+        return text
+            .replace(Regex("[إأآٱ]"), "ا")
+            .replace("ى", "ي")
+            .replace("ؤ", "و")
+            .replace("ئ", "ي")
+            .replace(Regex("\\u0640+"), "")
+            .replace(Regex("[ \\t]+"), " ")
+    }
+
+    fun autoTashkeelArabicText(text: String): String {
+        if (text.isBlank()) return text
+        // Rule-based morphological & lexical vocalizer for common Arabic prepositions, conjunctions, particles, and stems
+        val lexicon = mapOf(
+            "في" to "فِي",
+            "من" to "مِنْ",
+            "على" to "عَلَى",
+            "إلى" to "إِلَى",
+            "عن" to "عَنْ",
+            "مع" to "مَعَ",
+            "هذا" to "هَذَا",
+            "هذه" to "هَذِهِ",
+            "ذلك" to "ذَلِكَ",
+            "تلك" to "تِلْكَ",
+            "الذي" to "الَّذِي",
+            "التي" to "الَّتِي",
+            "الذين" to "الَّذِينَ",
+            "كان" to "كَانَ",
+            "كانت" to "كَانَتْ",
+            "يكون" to "يَكُونُ",
+            "إن" to "إِنَّ",
+            "أن" to "أَنْ",
+            "كل" to "كُلُّ",
+            "بعض" to "بَعْضُ",
+            "بين" to "بَيْنَ",
+            "عند" to "عِنْدَ",
+            "قد" to "قَدْ",
+            "لقد" to "لَقَدْ",
+            "لم" to "لَمْ",
+            "لن" to "لَنْ",
+            "لا" to "لَا",
+            "ما" to "مَا",
+            "هو" to "هُوَ",
+            "هي" to "هِيَ",
+            "هم" to "هُمْ",
+            "نحن" to "نَحْنُ",
+            "أنت" to "أَنْتَ",
+            "أنا" to "أَنَا",
+            "ثم" to "ثُمَّ",
+            "أو" to "أَوْ",
+            "بل" to "بَلْ",
+            "حتى" to "حَتَّى",
+            "حيث" to "حَيْثُ",
+            "كما" to "كَمَا",
+            "لأن" to "لِأَنَّ",
+            "غير" to "غَيْرِ",
+            "بعد" to "بَعْدَ",
+            "قبل" to "قَبْلَ",
+            "فوق" to "فَوْقَ",
+            "تحت" to "تَحْتَ",
+            "حول" to "حَوْلَ",
+            "خلال" to "خِلَالَ",
+            "ضد" to "ضِدَّ",
+            "نحو" to "نَحْوَ",
+            "دون" to "دُونَ",
+            "بدون" to "بِدُونِ",
+            "الكتاب" to "الْكِتَابُ",
+            "المستند" to "الْمُسْتَنَدُ",
+            "الفصل" to "الْفَصْلُ",
+            "البحث" to "الْبَحْثُ",
+            "العلم" to "الْعِلْمُ",
+            "المعرفة" to "الْمَعْرِفَةُ",
+            "اللغة" to "اللُّغَةُ",
+            "العربية" to "الْعَرَبِيَّةُ",
+            "التاريخ" to "التَّارِيخُ",
+            "الإنسان" to "الْإِنْسَانُ",
+            "الحياة" to "الْحَيَاةُ",
+            "المجتمع" to "الْمُجْتَمَعُ",
+            "الأدب" to "الْأَدَبُ",
+            "الشعر" to "الشِّعْرُ",
+            "القصيدة" to "الْقَصِيدَةُ",
+            "الفكر" to "الْفِكْرُ",
+            "الحكمة" to "الْحِكْمَةُ",
+            "القرآن" to "الْقُرْآنُ",
+            "السنة" to "السُّنَّةُ",
+            "الله" to "اللَّهِ",
+            "بسم" to "بِسْمِ",
+            "الرحمن" to "الرَّحْمَنِ",
+            "الرحيم" to "الرَّحِيمِ",
+            "الحمد" to "الْحَمْدُ",
+            "رب" to "رَبِّ",
+            "العالمين" to "الْعَالَمِينَ"
+        )
+
+        val sunLetters = setOf('ت', 'ث', 'د', 'ذ', 'ر', 'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ل', 'ن')
+        val prepositionsJar = setOf("فِي", "مِنْ", "عَلَى", "إِلَى", "عَنْ", "بِسْمِ")
+
+        return text.lines().joinToString("\n") { line ->
+            if (line.isBlank()) return@joinToString line
+            val tokens = line.split(Regex("\\s+"))
+            var prevWasJar = false
+            tokens.map { rawToken ->
+                val cleanWord = stripArabicDiacritics(rawToken.replace(Regex("[^\\p{InArabic}]"), ""))
+                val punctuationSuffix = rawToken.takeLastWhile { !Character.isLetterOrDigit(it) }
+                val punctuationPrefix = rawToken.takeWhile { !Character.isLetterOrDigit(it) }
+
+                if (cleanWord.isEmpty()) {
+                    prevWasJar = false
+                    rawToken
+                } else if (lexicon.containsKey(cleanWord)) {
+                    val mapped = lexicon[cleanWord]!!
+                    prevWasJar = mapped in prepositionsJar
+                    "$punctuationPrefix$mapped$punctuationSuffix"
+                } else {
+                    val sb = StringBuilder()
+                    var idx = 0
+                    // Handle Definite Article "ال"
+                    if (cleanWord.startsWith("ال") && cleanWord.length >= 4) {
+                        val thirdChar = cleanWord[2]
+                        if (thirdChar in sunLetters) {
+                            sb.append("ال").append(thirdChar).append("ّ")
+                            idx = 3
+                        } else {
+                            sb.append("الْ")
+                            idx = 2
+                        }
+                    } else if (cleanWord.startsWith("وال") && cleanWord.length >= 5) {
+                        val fourthChar = cleanWord[3]
+                        if (fourthChar in sunLetters) {
+                            sb.append("وَال").append(fourthChar).append("ّ")
+                            idx = 4
+                        } else {
+                            sb.append("وَالْ")
+                            idx = 3
+                        }
+                    } else if (cleanWord.startsWith("بال") && cleanWord.length >= 5) {
+                        sb.append("بِالْ")
+                        idx = 3
+                        prevWasJar = true
+                    } else if (cleanWord.startsWith("لل") && cleanWord.length >= 4) {
+                        sb.append("لِلْ")
+                        idx = 2
+                        prevWasJar = true
+                    }
+
+                    val body = cleanWord.substring(idx)
+                    if (body.isNotEmpty()) {
+                        for (cIdx in body.indices) {
+                            val ch = body[cIdx]
+                            sb.append(ch)
+                            val isLast = cIdx == body.lastIndex
+                            if (!isLast) {
+                                val nextCh = body[cIdx + 1]
+                                if (ch !in listOf('ا', 'و', 'ي', 'ى', 'آ') && cIdx == 0) {
+                                    when (nextCh) {
+                                        'ا', 'آ' -> sb.append('َ')
+                                        'و' -> sb.append('ُ')
+                                        'ي' -> sb.append('ِ')
+                                        else -> sb.append('َ')
+                                    }
+                                }
+                            } else {
+                                // Case ending (I'rab approximation)
+                                when {
+                                    ch == 'ة' -> sb.append(if (prevWasJar) 'ِ' else 'ُ')
+                                    body.endsWith("ون") || body.endsWith("ين") || body.endsWith("ان") -> {
+                                        sb.append('َ')
+                                    }
+                                    body.endsWith("ات") -> {
+                                        sb.append(if (prevWasJar) 'ِ' else 'ُ')
+                                    }
+                                    ch !in listOf('ا', 'ى', 'و', 'ي') -> {
+                                        sb.append(if (prevWasJar) 'ِ' else 'ُ')
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    prevWasJar = false
+                    "$punctuationPrefix$sb$punctuationSuffix"
+                }
+            }.joinToString(" ")
+        }
+    }
+
+    fun analyzeArabicPoetryAndProsody(text: String): PoetryProsodyReport {
+        val rawLines = text.lines()
+            .map { it.trim() }
+            .filter { it.length in 14..140 }
+
+        val verses = mutableListOf<PoeticVerseItem>()
+        for (line in rawLines) {
+            // Detect two-hemistich separators (*** or ✦ or ... or wide spaces or tab or centered divider)
+            val explicitSplit = line.split(Regex("\\s*(?:\\*{2,}|✦|•|―|—|\\t|\\s{3,}|\\.\\.\\.)\\s*")).filter { it.isNotBlank() }
+            val (sadr, ajuz) = if (explicitSplit.size >= 2) {
+                explicitSplit[0].trim() to explicitSplit[1].trim()
+            } else {
+                // Split balanced poetic line into two halves by word count if 6..16 words
+                val words = line.split(Regex("\\s+")).filter { it.isNotBlank() }
+                if (words.size in 6..16) {
+                    val mid = words.size / 2
+                    words.subList(0, mid).joinToString(" ") to words.subList(mid, words.size).joinToString(" ")
+                } else continue
+            }
+
+            // Build prosodic rhythm pattern (/ for mutaharrik, 0 for sakin/long vowel)
+            val strippedAjuz = stripArabicDiacritics(ajuz).replace(Regex("[^\\p{InArabic}\\s]"), "")
+            val patternBuilder = StringBuilder()
+            for (ch in strippedAjuz.takeLast(18)) {
+                if (ch.isWhitespace()) continue
+                if (ch in listOf('ا', 'و', 'ي', 'ى', 'آ')) {
+                    patternBuilder.append('0')
+                } else {
+                    patternBuilder.append('/')
+                }
+            }
+            val cleanEnd = strippedAjuz.trim().takeLast(3)
+            verses.add(
+                PoeticVerseItem(
+                    index = verses.size + 1,
+                    sadr = sadr,
+                    ajuz = ajuz,
+                    pattern = patternBuilder.toString().ifBlank { "//0/0//0" },
+                    endingLetters = cleanEnd
+                )
+            )
+            if (verses.size >= 24) break
+        }
+
+        // Determine dominant Rawiy (حرف الروي)
+        val lastChars = verses.mapNotNull { v ->
+            val cleaned = stripArabicDiacritics(v.ajuz).replace(Regex("[^\\p{InArabic}]"), "")
+            // If ends with Alef/Waw/Ya of prolongation (الإطلاق), check the consonant before it if consistent
+            if (cleaned.length >= 2 && cleaned.last() in listOf('ا', 'ي', 'و', 'ه')) {
+                cleaned[cleaned.length - 2]
+            } else {
+                cleaned.lastOrNull()
+            }
+        }
+        val dominantRawiy = lastChars.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: 'م'
+        val avgHemistichWords = if (verses.isNotEmpty()) {
+            verses.map { it.sadr.split(Regex("\\s+")).size }.average()
+        } else 4.0
+
+        val estimatedMeter = when {
+            avgHemistichWords >= 5.2 -> "بحر الطويل أو البسيط (تفعيلات تامّة: فعولن مفاعيلن)"
+            avgHemistichWords >= 4.2 -> "بحر الكامل أو الوافر (متفاعلن / مفاعلتن)"
+            avgHemistichWords >= 3.3 -> "بحر الخفيف أو الرمل (فاعلاتن مستفعلن)"
+            else -> "مجزوء الكامل أو المتقارب (فعولن فعولن)"
+        }
+
+        val rhymeType = if (verses.any { it.ajuz.trim().endsWith("ا") || it.ajuz.trim().endsWith("ي") }) {
+            "قافية مطلقة (موصولة بمد الإطلاق)"
+        } else {
+            "قافية مقيدة أو متحركة الروي"
+        }
+
+        val formattedPoem = buildString {
+            appendLine("📜 قصيدة منسقة (الصدر ✦ العجز) — حرف الروي: ($dominantRawiy) • $estimatedMeter")
+            appendLine("────────────────────────────────────────────────")
+            verses.forEach { v ->
+                appendLine("${v.sadr}   ✦   ${v.ajuz}")
+            }
+        }
+
+        return PoetryProsodyReport(
+            verses = verses,
+            rawiyLetter = dominantRawiy.toString(),
+            rhymeType = rhymeType,
+            estimatedMeter = estimatedMeter,
+            formattedTwoColumnText = formattedPoem
+        )
+    }
+
+    /**
+     * 3. Interactive Timeline & Entity Extractor (Hijri/Gregorian Dates, Centuries, People, Places)
+     */
+    fun extractTimelineAndEntities(plainText: String): TimelineAndEntitiesReport {
+        val paragraphs = plainText.split(Regex("\\n\\s*\\n|\\n")).map { it.trim() }.filter { it.isNotBlank() }
+        val timelineEvents = mutableListOf<TimelineEventItem>()
+
+        // Match Hijri years (e.g. 1445 هـ / 204هـ), Gregorian years (e.g. 1998 م / 2024), and Centuries (القرن ...)
+        val yearRegex = Regex("\\b(\\d{2,4})\\s*(هـ|هجري|هجرية|م|ميلادي|ميلادية)?\\b")
+        val centuryRegex = Regex("(القرن\\s+[\\p{InArabic}]+(?:\\s+الهجري|\\s+الميلادي)?)")
+
+        val seenKeys = mutableSetOf<String>()
+        for ((pIdx, para) in paragraphs.withIndex()) {
+            for (match in yearRegex.findAll(para)) {
+                val numStr = match.groupValues[1]
+                val suffix = match.groupValues[2]
+                val yearNum = numStr.toIntOrNull() ?: continue
+                val isHijri = suffix.startsWith("ه")
+                val isExplicitGregorian = suffix.startsWith("م")
+                if (!isHijri && !isExplicitGregorian && yearNum !in 600..2099) continue
+
+                val calType = when {
+                    isHijri -> "هجري"
+                    isExplicitGregorian || yearNum in 1700..2099 -> "ميلادي"
+                    yearNum in 100..1460 -> "هجري/تاريخي"
+                    else -> "تاريخ"
+                }
+                val label = if (suffix.isNotBlank()) "$yearNum $suffix" else "$yearNum م"
+                val dedupKey = "$yearNum-${para.take(25)}"
+                if (seenKeys.add(dedupKey) && timelineEvents.size < 30) {
+                    val start = (match.range.first - 45).coerceAtLeast(0)
+                    val end = (match.range.last + 85).coerceAtMost(para.length)
+                    val snippet = para.substring(start, end).replace("\n", " ").trim()
+                    timelineEvents.add(
+                        TimelineEventItem(
+                            yearLabel = label,
+                            sortYear = if (isHijri) yearNum + 579 else yearNum,
+                            calendarType = calType,
+                            snippet = snippet,
+                            positionIndex = pIdx
+                        )
+                    )
+                }
+            }
+
+            for (cMatch in centuryRegex.findAll(para)) {
+                val label = cMatch.value.trim()
+                if (seenKeys.add(label) && timelineEvents.size < 30) {
+                    timelineEvents.add(
+                        TimelineEventItem(
+                            yearLabel = label,
+                            sortYear = 1500 + pIdx,
+                            calendarType = "حقبة/قرن",
+                            snippet = para.take(120),
+                            positionIndex = pIdx
+                        )
+                    )
+                }
+            }
+        }
+
+        // Extract People (أعلام وشخصيات) & Places (مدن وأماكن)
+        val personTriggers = listOf(
+            "الإمام", "الشيخ", "الدكتور", "الأستاذ", "المؤلف", "الباحث", "الشاعر", "الأديب",
+            "الملك", "الأمير", "الخليفة", "السلطان", "الرئيس", "العالم", "ابن", "أبو", "أبي"
+        )
+        val placeTriggers = listOf(
+            "مدينة", "بلاد", "دولة", "مملكة", "جمهورية", "قرية", "إقليم", "عاصمة", "جامعة",
+            "مكة", "المدينة", "القدس", "القاهرة", "دمشق", "بغداد", "الرياض", "صنعاء", "الأندلس", "المغرب", "الشام", "مصر", "اليمن", "العراق"
+        )
+
+        val personMap = mutableMapOf<String, Triple<Int, String, Int>>()
+        val placeMap = mutableMapOf<String, Triple<Int, String, Int>>()
+
+        for ((pIdx, para) in paragraphs.withIndex()) {
+            val words = para.split(Regex("\\s+")).map { it.replace(Regex("[^\\p{L}]"), "") }.filter { it.isNotBlank() }
+            for (i in words.indices) {
+                val w = words[i]
+                if (w in personTriggers && i + 1 < words.size) {
+                    val next1 = words[i + 1]
+                    val next2 = words.getOrNull(i + 2) ?: ""
+                    val fullName = if (next1 in listOf("بن", "عبد", "أبي", "أبو") && next2.isNotBlank()) {
+                        "$w $next1 $next2"
+                    } else if (next2.length >= 3) {
+                        "$w $next1 $next2"
+                    } else {
+                        "$w $next1"
+                    }
+                    if (fullName.length >= 6) {
+                        val existing = personMap[fullName]
+                        personMap[fullName] = Triple((existing?.first ?: 0) + 1, existing?.second ?: para.take(110), existing?.third ?: pIdx)
+                    }
+                }
+                if (w in placeTriggers) {
+                    val placeName = if (w in listOf("مدينة", "بلاد", "دولة", "مملكة", "جمهورية", "عاصمة", "جامعة") && i + 1 < words.size) {
+                        "$w ${words[i + 1]}"
+                    } else {
+                        w
+                    }
+                    if (placeName.length >= 3) {
+                        val existing = placeMap[placeName]
+                        placeMap[placeName] = Triple((existing?.first ?: 0) + 1, existing?.second ?: para.take(110), existing?.third ?: pIdx)
+                    }
+                }
+            }
+        }
+
+        val peopleList = personMap.entries
+            .sortedByDescending { it.value.first }
+            .take(15)
+            .map { ExtractedEntityItem(it.key, "PERSON", it.value.first, it.value.second, it.value.third) }
+
+        val placesList = placeMap.entries
+            .sortedByDescending { it.value.first }
+            .take(15)
+            .map { ExtractedEntityItem(it.key, "PLACE", it.value.first, it.value.second, it.value.third) }
+
+        // Key conceptual terms (Al-prefixed nouns with high frequency)
+        val stopAl = setOf("الذي", "التي", "الذين", "اللاتي", "اليوم", "الآن", "العام", "الأول", "الثاني", "الثالث")
+        val termCounts = mutableMapOf<String, Triple<Int, String, Int>>()
+        for ((pIdx, para) in paragraphs.withIndex()) {
+            val words = para.split(Regex("\\s+")).map { stripArabicDiacritics(it.replace(Regex("[^\\p{L}]"), "")) }
+            for (w in words) {
+                if (w.startsWith("ال") && w.length in 5..14 && w !in stopAl) {
+                    val ex = termCounts[w]
+                    termCounts[w] = Triple((ex?.first ?: 0) + 1, ex?.second ?: para.take(100), ex?.third ?: pIdx)
+                }
+            }
+        }
+        val keyTermsList = termCounts.entries
+            .sortedByDescending { it.value.first }
+            .take(18)
+            .map { ExtractedEntityItem(it.key, "TERM", it.value.first, it.value.second, it.value.third) }
+
+        return TimelineAndEntitiesReport(
+            timelineEvents = timelineEvents.sortedBy { it.sortYear },
+            people = peopleList,
+            places = placesList,
+            keyTerms = keyTermsList
+        )
+    }
+
+    /**
+     * 4. Interactive Quiz & 3D Flashcards Generator (Auto MCQ Quiz from Document Content)
+     */
+    fun generateMcqQuizFromDocument(
+        plainText: String,
+        documentTitle: String,
+        flashcards: List<DocumentFlashcardItem>
+    ): List<McqQuizQuestion> {
+        val questions = mutableListOf<McqQuizQuestion>()
+
+        // 1. Include user's flashcards first if available
+        if (flashcards.size >= 2) {
+            val allAnswers = flashcards.map { it.definitionOrAnswer.take(75) }
+            for ((idx, card) in flashcards.take(5).withIndex()) {
+                val correct = card.definitionOrAnswer.take(75)
+                val distractors = allAnswers.filter { it != correct }.shuffled().take(3).toMutableList()
+                while (distractors.size < 3) {
+                    distractors.add("مفهوم ثانوي غير مذكور في (${card.positionLabel}) #${distractors.size + 1}")
+                }
+                val options = (distractors + correct).shuffled()
+                val correctIdx = options.indexOf(correct).coerceAtLeast(0)
+                questions.add(
+                    McqQuizQuestion(
+                        question = "ما المقصود بـ / إجابة: «${card.termOrQuestion}»؟",
+                        options = options,
+                        correctOptionIndex = correctIdx,
+                        explanation = "المرجع: ${card.positionLabel} — ${card.definitionOrAnswer}",
+                        positionLabel = card.positionLabel
+                    )
+                )
+            }
+        }
+
+        // 2. Generate contextual Cloze / Comprehension questions from key sentences in the document
+        val sentences = plainText.split(Regex("[.!؟\\n]+"))
+            .map { it.trim() }
+            .filter { it.length in 45..220 }
+
+        val candidateKeywords = sentences.flatMap { s ->
+            s.split(Regex("\\s+"))
+                .map { stripArabicDiacritics(it.replace(Regex("[^\\p{L}]"), "")) }
+                .filter { it.length >= 5 && it.startsWith("ال") }
+        }.distinct()
+
+        for ((sIdx, sentence) in sentences.take(12).withIndex()) {
+            if (questions.size >= 8) break
+            val words = sentence.split(Regex("\\s+"))
+            val targetWord = words.firstOrNull { w ->
+                val clean = stripArabicDiacritics(w.replace(Regex("[^\\p{L}]"), ""))
+                clean.length >= 5 && clean.startsWith("ال")
+            } ?: words.firstOrNull { it.length >= 5 } ?: continue
+
+            val cleanTarget = targetWord.replace(Regex("[^\\p{L}\\p{N}]"), "")
+            if (cleanTarget.length < 4) continue
+
+            val blankedSentence = sentence.replaceFirst(cleanTarget, " [ ........ ] ")
+            val distractors = candidateKeywords
+                .filter { it != cleanTarget && it != stripArabicDiacritics(cleanTarget) }
+                .shuffled()
+                .take(3)
+                .toMutableList()
+            val fallbackPool = listOf("التحليل المنهجي", "السياق التاريخي", "البنية المعرفية", "الدلالة اللغوية")
+            for (fb in fallbackPool) {
+                if (distractors.size >= 3) break
+                if (fb != cleanTarget && fb !in distractors) distractors.add(fb)
+            }
+
+            val options = (distractors.take(3) + cleanTarget).shuffled()
+            val correctIdx = options.indexOf(cleanTarget).coerceAtLeast(0)
+
+            questions.add(
+                McqQuizQuestion(
+                    question = "أكمل الفراغ بما ورد في المستند:\n«$blankedSentence»",
+                    options = options,
+                    correctOptionIndex = correctIdx,
+                    explanation = "النص الأصلي في المستند: «$sentence»",
+                    positionLabel = "فقرة ${sIdx + 1}"
+                )
+            )
+        }
+
+        if (questions.isEmpty()) {
+            questions.add(
+                McqQuizQuestion(
+                    question = "ما هو موضوع المستند الحالي «$documentTitle»؟",
+                    options = listOf(
+                        "مرجع نصي قيد القراءة والتحليل في استوديو التأليف",
+                        "جدول محاسبي غير نصي",
+                        "ملف صوتي فقط",
+                        "صورة خلفية"
+                    ),
+                    correctOptionIndex = 0,
+                    explanation = "يعمل مولد الاختبارات تلقائياً على تحليل الجمل والمفاهيم الواردة في المستند."
+                )
+            )
+        }
+
+        return questions
+    }
+
+    /**
+     * 5. Official Digital Stamp & SHA-256 Verification Certificate PDF Exporter
+     */
+    fun exportPdfWithOfficialCertificate(
+        context: Context,
+        sourceUri: Uri,
+        sourceFileName: String,
+        stampTitle: String,
+        authorOrOrgName: String,
+        stampColorHex: String,
+        applyStampOnAllPages: Boolean,
+        appendCertificatePage: Boolean,
+        plainTextForStats: String
+    ): File? {
+        var pfd: ParcelFileDescriptor? = null
+        var renderer: PdfRenderer? = null
+        return try {
+            val forensics = computeDocumentForensics(context, sourceUri, plainTextForStats)
+            pfd = openParcelFileDescriptor(context, sourceUri) ?: return null
+            renderer = PdfRenderer(pfd)
+            val totalPages = renderer.pageCount
+            if (totalPages <= 0) return null
+
+            val stampColor = try { Color.parseColor(stampColorHex) } catch (_: Exception) { Color.parseColor("#1D4ED8") }
+            val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date())
+
+            val pdfDoc = android.graphics.pdf.PdfDocument()
+            var lastPageW = 794
+            var lastPageH = 1123
+
+            for (pageIdx in 0 until totalPages) {
+                val page = renderer.openPage(pageIdx)
+                val outW = (page.width * 1.5f).toInt().coerceAtLeast(600)
+                val outH = (page.height * 1.5f).toInt().coerceAtLeast(800)
+                lastPageW = outW
+                lastPageH = outH
+
+                val bitmap = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                page.close()
+
+                val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(outW, outH, pageIdx + 1).create()
+                val outPage = pdfDoc.startPage(pageInfo)
+                val canvas = outPage.canvas
+                canvas.drawBitmap(bitmap, 0f, 0f, null)
+
+                if (applyStampOnAllPages || pageIdx == 0 || pageIdx == totalPages - 1) {
+                    drawOfficialSealOnCanvas(
+                        canvas = canvas,
+                        centerX = outW * 0.22f,
+                        centerY = outH * 0.86f,
+                        radius = (outW * 0.11f).coerceIn(55f, 95f),
+                        stampTitle = stampTitle,
+                        authorOrOrg = authorOrOrgName,
+                        dateStr = dateStr.substringBefore(" "),
+                        stampColor = stampColor
+                    )
+                }
+                pdfDoc.finishPage(outPage)
+            }
+
+            // Append formal SHA-256 Digital Verification Certificate Page at the end
+            if (appendCertificatePage) {
+                val certPageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(lastPageW, lastPageH, totalPages + 1).create()
+                val certPage = pdfDoc.startPage(certPageInfo)
+                val c = certPage.canvas
+                c.drawColor(Color.WHITE)
+
+                val borderPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 6f
+                    color = stampColor
+                }
+                val margin = lastPageW * 0.06f
+                c.drawRect(margin, margin, lastPageW - margin, lastPageH - margin, borderPaint)
+                borderPaint.strokeWidth = 2f
+                c.drawRect(margin + 12f, margin + 12f, lastPageW - margin - 12f, lastPageH - margin - 12f, borderPaint)
+
+                val titlePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = stampColor
+                    textSize = lastPageW * 0.038f
+                    isFakeBoldText = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                val bodyPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.DKGRAY
+                    textSize = lastPageW * 0.024f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                val hashPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.BLACK
+                    textSize = lastPageW * 0.019f
+                    typeface = android.graphics.Typeface.MONOSPACE
+                    isFakeBoldText = true
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+
+                val centerX = lastPageW / 2f
+                var curY = margin + lastPageH * 0.10f
+                c.drawText("شهادة توثيق واعتماد رقمي للمستند", centerX, curY, titlePaint)
+                curY += lastPageH * 0.045f
+                c.drawText("DIGITAL DOCUMENT VERIFICATION & AUTHENTICITY CERTIFICATE", centerX, curY, bodyPaint)
+
+                curY += lastPageH * 0.07f
+                c.drawText("اسم المستند: $sourceFileName", centerX, curY, bodyPaint)
+                curY += lastPageH * 0.045f
+                c.drawText("حالة الاعتماد: $stampTitle", centerX, curY, bodyPaint)
+                curY += lastPageH * 0.045f
+                c.drawText("الجهة / المؤلف المعتمد: ${authorOrOrgName.ifBlank { "المؤلف المعتمد" }}", centerX, curY, bodyPaint)
+                curY += lastPageH * 0.045f
+                c.drawText("تاريخ ووقت التوثيق: $dateStr", centerX, curY, bodyPaint)
+                curY += lastPageH * 0.045f
+                c.drawText("إجمالي الصفحات الأصلية: $totalPages • عدد الكلمات: ${forensics.wordCount}", centerX, curY, bodyPaint)
+
+                curY += lastPageH * 0.07f
+                c.drawText("البصمة الجنائية الرقمية (SHA-256 Checksum):", centerX, curY, titlePaint.apply { textSize = lastPageW * 0.026f })
+                curY += lastPageH * 0.04f
+                c.drawText(forensics.sha256Hash, centerX, curY, hashPaint)
+
+                drawOfficialSealOnCanvas(
+                    canvas = c,
+                    centerX = centerX,
+                    centerY = lastPageH * 0.76f,
+                    radius = (lastPageW * 0.14f).coerceIn(70f, 125f),
+                    stampTitle = stampTitle,
+                    authorOrOrg = authorOrOrgName,
+                    dateStr = dateStr.substringBefore(" "),
+                    stampColor = stampColor
+                )
+
+                pdfDoc.finishPage(certPage)
+            }
+
+            val baseName = sourceFileName.substringBeforeLast(".").ifBlank { "document" }
+            val outDir = File(context.cacheDir, "converted_docs").apply { mkdirs() }
+            val outFile = File(outDir, "${baseName}_certified_${System.currentTimeMillis() % 10000}.pdf")
+            FileOutputStream(outFile).use { pdfDoc.writeTo(it) }
+            pdfDoc.close()
+            outFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            try { renderer?.close() } catch (_: Exception) {}
+            try { pfd?.close() } catch (_: Exception) {}
+        }
+    }
+
+    private fun drawOfficialSealOnCanvas(
+        canvas: android.graphics.Canvas,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+        stampTitle: String,
+        authorOrOrg: String,
+        dateStr: String,
+        stampColor: Int
+    ) {
+        canvas.save()
+        canvas.rotate(-12f, centerX, centerY)
+
+        val ringPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            color = stampColor
+            alpha = 215
+            strokeWidth = (radius * 0.07f).coerceAtLeast(3f)
+        }
+        val fillPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.FILL
+            color = stampColor
+            alpha = 22
+        }
+
+        canvas.drawCircle(centerX, centerY, radius, fillPaint)
+        canvas.drawCircle(centerX, centerY, radius, ringPaint)
+        ringPaint.strokeWidth = (radius * 0.03f).coerceAtLeast(1.5f)
+        canvas.drawCircle(centerX, centerY, radius * 0.86f, ringPaint)
+
+        val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = stampColor
+            alpha = 230
+            isFakeBoldText = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            textSize = radius * 0.25f
+        }
+        canvas.drawText(stampTitle.take(18), centerX, centerY - radius * 0.12f, textPaint)
+
+        textPaint.textSize = radius * 0.18f
+        canvas.drawText(authorOrOrg.ifBlank { "نسخة موثقة" }.take(20), centerX, centerY + radius * 0.18f, textPaint)
+
+        textPaint.textSize = radius * 0.16f
+        canvas.drawText(dateStr, centerX, centerY + radius * 0.44f, textPaint)
+
+        canvas.restore()
+    }
+
+    /**
+     * 6. Page-Pinned Voice & Audio Notes Persistence
+     */
+    fun getPageVoiceNotes(context: Context, uriString: String): List<PageVoiceNoteItem> {
+        val prefs = context.getSharedPreferences("doc_viewer_prefs", Context.MODE_PRIVATE)
+        val raw = prefs.getString("voice_notes_${uriString.hashCode()}", null) ?: return emptyList()
+        return raw.split("\n").mapNotNull { line ->
+            val p = line.split("||")
+            if (p.size >= 7) {
+                PageVoiceNoteItem(
+                    id = p[0],
+                    uriString = uriString,
+                    pageOrSectionIndex = p[1].toIntOrNull() ?: 0,
+                    positionLabel = p[2],
+                    title = p[3],
+                    transcriptOrSummary = p[4],
+                    durationSeconds = p[5].toIntOrNull() ?: 5,
+                    audioFilePath = p[6],
+                    timestamp = p.getOrNull(7)?.toLongOrNull() ?: System.currentTimeMillis()
+                )
+            } else null
+        }
+    }
+
+    fun savePageVoiceNotes(context: Context, uriString: String, notes: List<PageVoiceNoteItem>) {
+        val prefs = context.getSharedPreferences("doc_viewer_prefs", Context.MODE_PRIVATE)
+        val serialized = notes.joinToString("\n") { n ->
+            val cleanTitle = n.title.replace("||", " ").replace("\n", " ")
+            val cleanTrans = n.transcriptOrSummary.replace("||", " ").replace("\n", " ")
+            "${n.id}||${n.pageOrSectionIndex}||${n.positionLabel}||$cleanTitle||$cleanTrans||${n.durationSeconds}||${n.audioFilePath}||${n.timestamp}"
+        }
+        prefs.edit().putString("voice_notes_${uriString.hashCode()}", serialized).apply()
+    }
+
+    /**
+     * 7. Back-of-Book Automated Alphabetical Indexer (كشاف المصطلحات والأعلام الأبجدي أ - ي)
+     */
+    fun generateBackOfBookIndex(
+        plainText: String,
+        outline: List<DocumentOutlineItem>
+    ): Map<Char, List<BackOfBookIndexEntry>> {
+        val stopWords = setOf(
+            "في", "من", "على", "إلى", "عن", "مع", "هذا", "هذه", "ذلك", "تلك", "التي", "الذي",
+            "الذين", "كان", "كانت", "يكون", "هو", "هي", "هم", "أو", "ثم", "بل", "لا", "ما",
+            "إن", "أن", "قد", "كل", "بعض", "بين", "عند", "غير", "فوق", "تحت", "بعد", "قبل",
+            "حتى", "حيث", "كما", "لأن", "ولكن", "التي", "الذي", "اليوم", "الأول", "الثاني"
+        )
+
+        val paragraphs = plainText.split(Regex("\\n\\s*\\n|\\n")).map { it.trim() }.filter { it.isNotBlank() }
+        val termOccurrences = mutableMapOf<String, MutableList<Int>>()
+        val termContext = mutableMapOf<String, String>()
+
+        for ((pIdx, para) in paragraphs.withIndex()) {
+            val words = para.split(Regex("\\s+"))
+                .map { stripArabicDiacritics(it.replace(Regex("[^\\p{L}]"), "")) }
+                .filter { it.length in 4..16 && it !in stopWords }
+
+            for (rawWord in words) {
+                // Normalize leading "ال" for alphabetical sorting while keeping readable term
+                val displayTerm = rawWord
+                val list = termOccurrences.getOrPut(displayTerm) { mutableListOf() }
+                if (list.size < 12 && (list.isEmpty() || list.last() != pIdx + 1)) {
+                    list.add(pIdx + 1)
+                }
+                if (!termContext.containsKey(displayTerm)) {
+                    termContext[displayTerm] = para.take(95)
+                }
+            }
+        }
+
+        val entries = termOccurrences.entries
+            .filter { it.value.size >= 2 || it.key.startsWith("ال") }
+            .sortedByDescending { it.value.size }
+            .take(90)
+            .map { (term, locs) ->
+                val coreForSort = if (term.startsWith("ال") && term.length > 3) term.substring(2) else term
+                val firstChar = when (val c = coreForSort.firstOrNull()?.uppercaseChar() ?: 'أ') {
+                    'إ', 'أ', 'آ', 'ٱ' -> 'أ'
+                    else -> c
+                }
+                BackOfBookIndexEntry(
+                    term = term,
+                    firstLetter = firstChar,
+                    count = locs.size,
+                    locations = locs.take(6).map { "موضع $it" },
+                    sampleContext = termContext[term] ?: ""
+                )
+            }
+            .sortedWith(compareBy({ it.firstLetter }, { it.term }))
+
+        return entries.groupBy { it.firstLetter }.toSortedMap()
+    }
 }
+
+

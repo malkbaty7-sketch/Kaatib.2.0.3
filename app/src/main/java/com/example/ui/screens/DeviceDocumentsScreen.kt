@@ -44,6 +44,7 @@ import com.example.data.model.AppThemeData
 import com.example.data.model.DocumentProgressEntity
 import com.example.ui.MainViewModel
 import com.example.util.DocumentCategory
+import com.example.util.DocumentVaultAndSaveManager
 import com.example.util.MultiFormatDocumentEngine
 import com.example.util.ScannedDocumentItem
 import kotlinx.coroutines.Dispatchers
@@ -71,7 +72,7 @@ fun DeviceDocumentsScreen(
     var searchQuery by remember { mutableStateOf("") }
 
     // Folder, tags and sorting states
-    var customFolders by remember { mutableStateOf(listOf("الكل", "المفضلة", "الرئيسي", "المحولة", "مسودات ومراجع")) }
+    var customFolders by remember { mutableStateOf(listOf("الكل", "الخزنة", "المفضلة", "الرئيسي", "المحولة", "مسودات ومراجع")) }
     var selectedFolder by remember { mutableStateOf("الكل") }
     var selectedTagFilter by remember { mutableStateOf<String?>(null) }
     val presetTags = remember { listOf("مرجع تاريخي", "مسودة", "للترجمة", "هام", "اقتباسات") }
@@ -84,10 +85,12 @@ fun DeviceDocumentsScreen(
     var showTopMoreMenu by remember { mutableStateOf(false) }
     var showRecentReadingStrip by remember { mutableStateOf(true) }
 
-    // Converter Studio Dialog
+    // Converter Studio & Smart Save/Vault Center Dialogs
     var showConverterDialog by remember { mutableStateOf(false) }
     var targetDocForConverter by remember { mutableStateOf<ScannedDocumentItem?>(null) }
     var showDocmoStudioDialog by remember { mutableStateOf(false) }
+    var showSaveAndVaultCenterSheet by remember { mutableStateOf(false) }
+    var saveAndVaultInitialTab by remember { mutableStateOf("VAULT") }
 
     val allProgressList by viewModel.allDocumentProgress.collectAsState(initial = emptyList())
     val progressMap = remember(allProgressList) {
@@ -159,11 +162,25 @@ fun DeviceDocumentsScreen(
         coroutineScope.launch {
             isScanning = true
             val list = withContext(Dispatchers.IO) {
-                MultiFormatDocumentEngine.scanStorageDocuments(context)
+                val storageDocs = MultiFormatDocumentEngine.scanStorageDocuments(context)
+                val vaultedItems = DocumentVaultAndSaveManager.getVaultDocuments(context).map { v ->
+                    ScannedDocumentItem(
+                        uriString = v.localUriString,
+                        name = if (v.isPinLocked) "🔒 ${v.title}.${v.extension}" else "${v.title}.${v.extension}",
+                        extension = v.extension,
+                        sizeBytes = v.sizeBytes,
+                        lastModified = v.lastModifiedTimestamp,
+                        category = MultiFormatDocumentEngine.detectCategory(v.extension),
+                        folderName = "الخزنة",
+                        isFavorite = true,
+                        tags = listOf("الخزنة", v.categoryLabel).filter { it.isNotBlank() }
+                    )
+                }
+                (vaultedItems + storageDocs).distinctBy { it.uriString }
             }
             scannedDocuments = list
             isScanning = false
-            Toast.makeText(context, "تم العثور على ${list.size} مستند في ذاكرة الجهاز", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "تم العثور على ${list.size} مستند في ذاكرة الجهاز والخزنة", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -349,6 +366,21 @@ fun DeviceDocumentsScreen(
 
                         IconButton(
                             onClick = {
+                                saveAndVaultInitialTab = "VAULT"
+                                showSaveAndVaultCenterSheet = true
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.EnhancedEncryption,
+                                contentDescription = "خزنة المستندات وحزم .abdoc",
+                                tint = Color(0xFF0D9488),
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
                                 targetDocForConverter = null
                                 showConverterDialog = true
                             },
@@ -378,6 +410,24 @@ fun DeviceDocumentsScreen(
                                 expanded = showTopMoreMenu,
                                 onDismissRequest = { showTopMoreMenu = false }
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text("خزنة المستندات المحمية بـ PIN 🛡️", fontSize = 12.sp) },
+                                    onClick = {
+                                        showTopMoreMenu = false
+                                        saveAndVaultInitialTab = "VAULT"
+                                        showSaveAndVaultCenterSheet = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.EnhancedEncryption, contentDescription = null, tint = Color(0xFF0D9488), modifier = Modifier.size(16.dp)) }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("استيراد وتصدير حزم .abdoc الشاملة 📦", fontSize = 12.sp) },
+                                    onClick = {
+                                        showTopMoreMenu = false
+                                        saveAndVaultInitialTab = "BUNDLE"
+                                        showSaveAndVaultCenterSheet = true
+                                    },
+                                    leadingIcon = { Icon(Icons.Default.FolderZip, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(16.dp)) }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("إعادة فحص الذاكرة 🔄", fontSize = 12.sp) },
                                     onClick = {
@@ -972,6 +1022,25 @@ fun DeviceDocumentsScreen(
         DocmoStudioWebViewDialog(
             theme = theme,
             onDismiss = { showDocmoStudioDialog = false }
+        )
+    }
+
+    if (showSaveAndVaultCenterSheet) {
+        DocumentSaveAndVaultCenterSheet(
+            theme = theme,
+            currentDocumentUri = targetDocForConverter?.let { Uri.parse(it.uriString) },
+            currentDocumentName = targetDocForConverter?.name ?: "",
+            currentDocumentExtension = targetDocForConverter?.extension ?: "",
+            readableTextContent = "",
+            initialTab = saveAndVaultInitialTab,
+            onOpenDocumentFromVaultOrBundle = { uriStr, docName ->
+                showSaveAndVaultCenterSheet = false
+                onOpenDocument(uriStr, docName)
+            },
+            onDismiss = {
+                showSaveAndVaultCenterSheet = false
+                startAutoScan()
+            }
         )
     }
 }
