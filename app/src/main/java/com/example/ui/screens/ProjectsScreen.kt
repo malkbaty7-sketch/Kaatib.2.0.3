@@ -152,6 +152,7 @@ fun ProjectsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(theme.backgroundBrush)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {

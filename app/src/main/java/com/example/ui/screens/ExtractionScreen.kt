@@ -71,6 +71,7 @@ fun ExtractionScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .background(theme.backgroundBrush)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
