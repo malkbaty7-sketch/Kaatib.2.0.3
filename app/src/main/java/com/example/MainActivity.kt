@@ -614,6 +614,14 @@ class MainActivity : ComponentActivity() {
                                         )
 
                                         NavigationBarItem(
+                                            selected = currentTab == "EXTRACTION",
+                                            onClick = { currentTab = "EXTRACTION" },
+                                            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "الاستخلاص", modifier = Modifier.size(20.dp)) },
+                                            label = { Text(AppLocalization.string(currentLang, "tab_extraction"), fontSize = 10.sp, fontWeight = if (currentTab == "EXTRACTION") FontWeight.Bold else FontWeight.Medium) },
+                                            colors = navItemColors
+                                        )
+
+                                        NavigationBarItem(
                                             selected = currentTab == "PROJECTS",
                                             onClick = { currentTab = "PROJECTS" },
                                             icon = { Icon(Icons.Default.LibraryBooks, contentDescription = "المشاريع", modifier = Modifier.size(20.dp)) },
