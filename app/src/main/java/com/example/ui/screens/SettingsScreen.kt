@@ -101,6 +101,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(theme.backgroundBrush)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
