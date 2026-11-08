@@ -172,7 +172,7 @@ fun DocumentToolsAndConverterDialog(
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.92f)
                 .clip(RoundedCornerShape(22.dp)),
-            color = Color(0xFFF8FAFC)
+            color = theme.backgroundColors.first()
         ) {
             Column(
                 modifier = Modifier
@@ -223,7 +223,7 @@ fun DocumentToolsAndConverterDialog(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                 ) {
                     Row(
                         modifier = Modifier
@@ -273,7 +273,7 @@ fun DocumentToolsAndConverterDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFE2E8F0))
+                        .background(theme.borderColor.copy(alpha = 0.45f))
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -290,7 +290,7 @@ fun DocumentToolsAndConverterDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(9.dp))
-                                .background(if (isSelected) Color.White else Color.Transparent)
+                                .background(if (isSelected) theme.elevatedCardColor else Color.Transparent)
                                 .clickable { activeTab = id }
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.Center
@@ -432,7 +432,7 @@ fun DocumentToolsAndConverterDialog(
                                         .clickable { singlePickerLauncher.launch(arrayOf("*/*")) }
                                         .border(2.dp, if (selectedUri != null) theme.primaryColor else Color(0xFFCBD5E1), RoundedCornerShape(14.dp)),
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -467,7 +467,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Text("التحويل إلى صيغة:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = theme.textColor)
@@ -482,7 +482,7 @@ fun DocumentToolsAndConverterDialog(
                                                         .weight(1f)
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .clickable { arabicTargetFormat = target }
-                                                        .background(if (isSel) theme.primaryColor else Color(0xFFF1F5F9))
+                                                        .background(if (isSel) theme.primaryColor else theme.borderColor.copy(alpha = 0.35f))
                                                         .padding(vertical = 8.dp),
                                                     color = Color.Transparent
                                                 ) {
@@ -490,7 +490,7 @@ fun DocumentToolsAndConverterDialog(
                                                         text = target.displayName,
                                                         fontSize = 11.sp,
                                                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (isSel) Color.White else Color(0xFF334155),
+                                                        color = if (isSel) Color.White else theme.textColor,
                                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                                     )
                                                 }
@@ -505,7 +505,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Text("طريقة القراءة والمعالجة:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = theme.textColor)
@@ -524,7 +524,7 @@ fun DocumentToolsAndConverterDialog(
                                                         .weight(1f)
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .clickable { arabicReadingMode = m }
-                                                        .background(if (isSel) theme.primaryColor else Color(0xFFF1F5F9))
+                                                        .background(if (isSel) theme.primaryColor else theme.borderColor.copy(alpha = 0.35f))
                                                         .padding(vertical = 8.dp, horizontal = 4.dp),
                                                     color = Color.Transparent
                                                 ) {
@@ -532,7 +532,7 @@ fun DocumentToolsAndConverterDialog(
                                                         text = label,
                                                         fontSize = 10.sp,
                                                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (isSel) Color.White else Color(0xFF334155),
+                                                        color = if (isSel) Color.White else theme.textColor,
                                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                                         maxLines = 1
                                                     )
@@ -548,7 +548,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -647,7 +647,7 @@ fun DocumentToolsAndConverterDialog(
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(14.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                                        colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor),
                                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
                                     ) {
                                         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1124,7 +1124,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1171,7 +1171,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1226,7 +1226,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1279,7 +1279,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1343,7 +1343,7 @@ fun DocumentToolsAndConverterDialog(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
                                 ) {
                                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
