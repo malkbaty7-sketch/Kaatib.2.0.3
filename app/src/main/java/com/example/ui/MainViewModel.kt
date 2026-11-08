@@ -48,7 +48,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // App Visual Theme
-    val currentThemeId = MutableStateFlow("warmSunset")
+    val currentThemeId = MutableStateFlow("kaatibRoyal")
     val currentTheme: StateFlow<AppThemeData> = currentThemeId.map { id ->
         defaultAppThemes.firstOrNull { it.id == id } ?: defaultAppThemes[0]
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), defaultAppThemes[0])
