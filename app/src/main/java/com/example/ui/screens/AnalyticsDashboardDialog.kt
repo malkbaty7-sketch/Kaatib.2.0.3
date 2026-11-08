@@ -267,7 +267,7 @@ fun AnalyticsDashboardDialog(
                         }
 
                         // Custom Canvas Bar Chart
-                        WeeklyOutputBarChart(days = recentDays, targetGoal = currentDayData.targetWordGoal)
+                        WeeklyOutputBarChart(days = recentDays, targetGoal = currentDayData.targetWordGoal, theme = theme)
                     }
                 }
 
@@ -280,7 +280,8 @@ fun AnalyticsDashboardDialog(
                 ) {
                     MetricStatCard(
                         icon = Icons.Default.Speed,
-                        iconTint = Color(0xFF2563EB),
+                        iconTint = Color(0xFFB9934C),
+                        theme = theme,
                         title = "سرعة التأليف",
                         value = "${currentDayData.wordsPerMinute} ك/د",
                         subtitle = "كلمة في الدقيقة (WPM)",
@@ -288,7 +289,8 @@ fun AnalyticsDashboardDialog(
                     )
                     MetricStatCard(
                         icon = Icons.Default.Timer,
-                        iconTint = Color(0xFF7C3AED),
+                        iconTint = theme.primaryColor,
+                        theme = theme,
                         title = "وقت الجلسات",
                         value = "${currentDayData.sessionMinutes} دقيقة",
                         subtitle = "إجمالي التركيز اليوم",
@@ -302,7 +304,8 @@ fun AnalyticsDashboardDialog(
                 ) {
                     MetricStatCard(
                         icon = Icons.Default.AddCircle,
-                        iconTint = Color(0xFF10B981),
+                        iconTint = Color(0xFF16A34A),
+                        theme = theme,
                         title = "كلمات مضافة",
                         value = "+${currentDayData.wordsAdded}",
                         subtitle = "أفكار ومسودات جديدة",
@@ -310,7 +313,8 @@ fun AnalyticsDashboardDialog(
                     )
                     MetricStatCard(
                         icon = Icons.Default.WbTwilight,
-                        iconTint = Color(0xFFF59E0B),
+                        iconTint = Color(0xFFB9934C),
+                        theme = theme,
                         title = "ساعة الذروة",
                         value = "${currentDayData.peakHour}:00",
                         subtitle = "أعلى أوقات نشاطك الذهني",
@@ -325,7 +329,8 @@ fun AnalyticsDashboardDialog(
 @Composable
 private fun WeeklyOutputBarChart(
     days: List<DailyWritingAnalyticsEntity>,
-    targetGoal: Int
+    targetGoal: Int,
+    theme: AppThemeData
 ) {
     val maxWords = maxOf(targetGoal, days.maxOfOrNull { it.netWords } ?: 2000)
 
@@ -363,9 +368,9 @@ private fun WeeklyOutputBarChart(
 
                     val isGoalMet = day.netWords >= day.targetWordGoal
                     val barBrush = if (isGoalMet) {
-                        Brush.verticalGradient(listOf(Color(0xFF0D9488), Color(0xFF14B8A6)))
+                        Brush.verticalGradient(listOf(Color(0xFFB9934C), Color(0xFFD2B16B)))
                     } else {
-                        Brush.verticalGradient(listOf(Color(0xFF3B82F6), Color(0xFF60A5FA)))
+                        Brush.verticalGradient(listOf(theme.primaryColor, theme.primaryColor.copy(alpha = 0.62f)))
                     }
 
                     drawRoundRect(
@@ -387,7 +392,7 @@ private fun WeeklyOutputBarChart(
                 val daySub = day.dateKey.takeLast(5) // MM-DD
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(daySub, fontSize = 9.sp, color = theme.subtleTextColor)
-                    Text("${day.netWords}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                    Text("${day.netWords}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = theme.textColor)
                 }
             }
         }
@@ -396,6 +401,7 @@ private fun WeeklyOutputBarChart(
 
 @Composable
 private fun MetricStatCard(
+    theme: AppThemeData,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     iconTint: Color,
     title: String,
@@ -420,7 +426,7 @@ private fun MetricStatCard(
                 Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
                 Text(title, fontSize = 11.sp, color = theme.subtleTextColor)
             }
-            Text(value, fontSize = 17.sp, fontWeight = FontWeight.Black, color = Color(0xFF1E293B))
+            Text(value, fontSize = 17.sp, fontWeight = FontWeight.Black, color = theme.textColor)
             Text(subtitle, fontSize = 9.sp, color = theme.subtleTextColor)
         }
     }
