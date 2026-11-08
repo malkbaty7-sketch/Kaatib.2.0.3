@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 val ttsCurrentSentence by viewModel.ttsManager.currentSentenceText.collectAsState()
                 val ttsSpeechRate by viewModel.ttsManager.speechRate.collectAsState()
 
-                var currentTab by remember { mutableStateOf("PROJECTS") } // FILES, EXTRACTION, PROJECTS, DOCUMENTS, SETTINGS
+                var currentTab by remember { mutableStateOf("HOME") } // HOME, FILES, EXTRACTION, PROJECTS, DOCUMENTS, SETTINGS
                 var isEditingProject by remember { mutableStateOf(false) }
                 var showDeviceDocsScreen by remember { mutableStateOf(false) }
                 var viewingDocUri by remember { mutableStateOf<String?>(null) }
@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
                 var showArabicConverterStudio by remember { mutableStateOf(false) }
                 var showCommandPalette by remember { mutableStateOf(false) }
 
-                BackHandler(enabled = viewingDocUri != null || showDeviceDocsScreen || isEditingProject || currentTab != "PROJECTS") {
+                BackHandler(enabled = viewingDocUri != null || showDeviceDocsScreen || isEditingProject || currentTab != "HOME") {
                     if (viewingDocUri != null) {
                         viewingDocUri = null
                     } else if (showDeviceDocsScreen) {
@@ -598,18 +598,18 @@ class MainActivity : ComponentActivity() {
                                         )
 
                                         NavigationBarItem(
-                                            selected = currentTab == "FILES",
-                                            onClick = { currentTab = "FILES" },
-                                            icon = { Icon(Icons.Default.Folder, contentDescription = "المصادر", modifier = Modifier.size(20.dp)) },
-                                            label = { Text(AppLocalization.string(currentLang, "tab_files"), fontSize = 10.sp, fontWeight = if (currentTab == "FILES") FontWeight.Bold else FontWeight.Medium) },
+                                            selected = currentTab == "HOME",
+                                            onClick = { currentTab = "HOME" },
+                                            icon = { Icon(Icons.Default.Home, contentDescription = "الرئيسية", modifier = Modifier.size(20.dp)) },
+                                            label = { Text("الرئيسية", fontSize = 10.sp, fontWeight = if (currentTab == "HOME") FontWeight.Bold else FontWeight.Medium) },
                                             colors = navItemColors
                                         )
 
                                         NavigationBarItem(
-                                            selected = currentTab == "EXTRACTION",
-                                            onClick = { currentTab = "EXTRACTION" },
-                                            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "الاستخلاص", modifier = Modifier.size(20.dp)) },
-                                            label = { Text(AppLocalization.string(currentLang, "tab_extraction"), fontSize = 10.sp, fontWeight = if (currentTab == "EXTRACTION") FontWeight.Bold else FontWeight.Medium) },
+                                            selected = currentTab == "FILES",
+                                            onClick = { currentTab = "FILES" },
+                                            icon = { Icon(Icons.Default.Folder, contentDescription = "المصادر", modifier = Modifier.size(20.dp)) },
+                                            label = { Text(AppLocalization.string(currentLang, "tab_files"), fontSize = 10.sp, fontWeight = if (currentTab == "FILES") FontWeight.Bold else FontWeight.Medium) },
                                             colors = navItemColors
                                         )
 
@@ -654,6 +654,25 @@ class MainActivity : ComponentActivity() {
                                     label = "MainTabTransition"
                                 ) { targetTab ->
                                     when (targetTab) {
+                                        "HOME" -> DashboardScreen(
+                                            viewModel = viewModel,
+                                            theme = theme,
+                                            onOpenFiles = { currentTab = "FILES" },
+                                            onOpenExtraction = { currentTab = "EXTRACTION" },
+                                            onOpenProjects = { currentTab = "PROJECTS" },
+                                            onOpenDocuments = { currentTab = "DOCUMENTS" },
+                                            onOpenConverter = { showArabicConverterStudio = true },
+                                            onOpenBrowser = { showBrowserDialog = true },
+                                            onOpenAnalytics = { showAnalyticsDialog = true },
+                                            onOpenSubscription = { showSubscriptionDialog = true },
+                                            onOpenSettings = { currentTab = "SETTINGS" },
+                                            onStartAudio = {
+                                                val textToRead = activeChapters.firstOrNull()?.content ?: ""
+                                                if (textToRead.isNotBlank()) viewModel.startTtsReading(textToRead)
+                                                else Toast.makeText(this@MainActivity, "لا يوجد نص جاهز للقراءة الصوتية", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+
                                         "FILES" -> FilesScreen(
                                             viewModel = viewModel,
                                             onNavigateToExtraction = { currentTab = "EXTRACTION" },
