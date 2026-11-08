@@ -37,6 +37,21 @@ jobs:
       - name: Validate Gradle installation
         run: gradle --version
 
+      - name: Prepare debug keystore
+        shell: bash
+        run: |
+          rm -f debug.keystore
+          if [ -f "debug.keystore.base64" ]; then
+            tr -d '[:space:]' < debug.keystore.base64 | base64 --decode > debug.keystore || true
+          fi
+          if ! keytool -list -keystore debug.keystore -storepass android >/dev/null 2>&1; then
+            rm -f debug.keystore
+            keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
       - name: Run unit tests
         run: gradle testDebugUnitTest --no-daemon --stacktrace
 
