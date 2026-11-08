@@ -273,6 +273,7 @@ fun DeviceDocumentsScreen(
     }
 
     Scaffold(
+        containerColor = theme.backgroundColors.first(),
         topBar = {
             Surface(
                 color = theme.surfaceColor,
