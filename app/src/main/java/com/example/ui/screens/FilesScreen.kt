@@ -74,6 +74,7 @@ fun FilesScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(theme.backgroundBrush)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
