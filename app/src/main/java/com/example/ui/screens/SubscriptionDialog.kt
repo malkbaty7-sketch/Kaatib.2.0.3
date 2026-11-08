@@ -42,7 +42,7 @@ fun SubscriptionDialog(theme: AppThemeData, viewModel: MainViewModel, onDismiss:
             ) {
                 Box(
                     modifier = Modifier.size(54.dp).clip(RoundedCornerShape(16.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFD97706)))),
+                        .background(Brush.linearGradient(listOf(theme.primaryColor, Color(0xFFB9934C)))),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
@@ -80,7 +80,7 @@ fun SubscriptionDialog(theme: AppThemeData, viewModel: MainViewModel, onDismiss:
                         onDismiss()
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB9934C), contentColor = Color(0xFF142744)),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(vertical = 12.dp)
                 ) {
@@ -113,7 +113,7 @@ fun PlanCard(
     isSelected: Boolean, onSelect: () -> Unit, theme: AppThemeData,
     modifier: Modifier = Modifier
 ) {
-    val selectedBackground = if (theme.isDark) Color(0xFF5B4825) else Color(0xFFFEF3C7)
+    val selectedBackground = if (theme.isDark) Color(0xFF3A3326) else Color(0xFFF5EDDB)
     Card(
         modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable { onSelect() }.border(
             width = if (isSelected) 2.dp else 1.dp,
@@ -130,7 +130,7 @@ fun PlanCard(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (badge != null) {
-                Surface(color = Color(0xFFD97706), shape = RoundedCornerShape(4.dp)) {
+                Surface(color = Color(0xFFB9934C), shape = RoundedCornerShape(4.dp)) {
                     Text(badge, fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
                 }
@@ -138,7 +138,7 @@ fun PlanCard(
                 Spacer(modifier = Modifier.height(14.dp))
             }
             Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.textColor)
-            Text(price, fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFFD2B16B))
+            Text(price, fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color(0xFFB9934C))
             Text(period, fontSize = 10.sp, color = theme.subtleTextColor)
         }
     }

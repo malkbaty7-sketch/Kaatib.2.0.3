@@ -499,8 +499,7 @@ fun DeviceDocumentsScreen(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("تصفح ملف 📂", fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
-        },
-        containerColor = theme.surfaceColor
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier

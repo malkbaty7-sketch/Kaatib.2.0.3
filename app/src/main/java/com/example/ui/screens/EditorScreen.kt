@@ -326,8 +326,8 @@ fun EditorScreen(
                             Surface(
                                 onClick = { isFocusMode = true },
                                 shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFF0F766E).copy(alpha = 0.14f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF0F766E).copy(alpha = 0.35f)),
+                                color = Color(0xFFB9934C).copy(alpha = 0.14f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFB9934C).copy(alpha = 0.45f)),
                                 modifier = Modifier.height(26.dp)
                             ) {
                                 Row(
@@ -335,8 +335,8 @@ fun EditorScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Icon(Icons.Default.SelfImprovement, contentDescription = "وضع Zen", tint = Color(0xFF0F766E), modifier = Modifier.size(13.dp))
-                                    Text("Zen", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F766E))
+                                    Icon(Icons.Default.SelfImprovement, contentDescription = "وضع Zen", tint = Color(0xFFB9934C), modifier = Modifier.size(13.dp))
+                                    Text("Zen", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB9934C))
                                 }
                             }
 

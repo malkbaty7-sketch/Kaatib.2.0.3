@@ -26,19 +26,16 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystoreFile = file(System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() } ?: "${rootDir}/build/keystore/my-upload-key.jks")
-      if (!keystoreFile.exists() || keystoreFile.length() < 100L) {
-        keystoreFile.parentFile?.mkdirs()
-        val base64File = file("${rootDir}/my-upload-key.jks.base64")
-        if (base64File.exists()) {
-          val cleaned = base64File.readText().replace("\\s".toRegex(), "")
-          keystoreFile.writeBytes(Base64.getDecoder().decode(cleaned))
-        }
-      }
+      val keystoreFile = file(
+        System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+          ?: "${rootDir}/build/keystore/my-upload-key.jks"
+      )
+      // Release signing must use a private key supplied by the build environment.
+      // Never fall back to a repository-stored keystore or a predictable password.
       storeFile = keystoreFile
-      storePassword = System.getenv("STORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "katib2026"
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "katib2026"
+      storePassword = System.getenv("STORE_PASSWORD").orEmpty()
+      keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "upload"
+      keyPassword = System.getenv("KEY_PASSWORD").orEmpty()
     }
     create("debugConfig") {
       val debugKeystoreFile = file("${rootDir}/debug.keystore")

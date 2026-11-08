@@ -21,3 +21,7 @@ gradle/wrapper/gradle-wrapper.jar
 .build-outputs
 /app/build
 /public/assets/aistudio/
+
+# Never commit encoded signing material
+*.jks.base64
+*.keystore.base64

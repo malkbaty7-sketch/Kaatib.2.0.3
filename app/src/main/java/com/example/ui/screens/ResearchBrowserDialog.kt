@@ -133,7 +133,7 @@ fun ResearchBrowserDialog(
                 .fillMaxHeight(0.94f)
                 .shadow(16.dp, RoundedCornerShape(20.dp)),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor)
         ) {
             Column(
                 modifier = Modifier
@@ -170,7 +170,7 @@ fun ResearchBrowserDialog(
                             Text(
                                 text = "بحث مخصص للكتب الإلكترونية، ملفات PDF، والبحوث العلمية فقط",
                                 fontSize = 10.sp,
-                                color = Color.Gray
+                                color = theme.subtleTextColor
                             )
                         }
                     }
@@ -180,7 +180,7 @@ fun ResearchBrowserDialog(
                     }
                 }
 
-                Divider(color = Color.Black.copy(alpha = 0.08f))
+                Divider(color = theme.borderColor.copy(alpha = 0.65f))
 
                 // Search Bar & Engine Quick Launch
                 OutlinedTextField(
@@ -272,7 +272,7 @@ fun ResearchBrowserDialog(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(Icons.Default.FindInPage, contentDescription = null, modifier = Modifier.size(44.dp), tint = Color.LightGray)
-                                Text("لم يتم العثور على كتب مطابقة مباشرة لكلمة البحث", color = Color.Gray, fontSize = 12.sp)
+                                Text("لم يتم العثور على كتب مطابقة مباشرة لكلمة البحث", color = theme.subtleTextColor, fontSize = 12.sp)
                                 Text("جرب كلمات مثل: 'بحث'، 'رواية'، 'تاريخ'، 'علم'", color = theme.primaryColor, fontSize = 11.sp)
                             }
                         }
@@ -331,7 +331,7 @@ fun ResearchBrowserDialog(
                                             text = book.sampleText,
                                             fontSize = 11.sp,
                                             lineHeight = 17.sp,
-                                            color = Color.Gray,
+                                            color = theme.subtleTextColor,
                                             maxLines = 2
                                         )
 
