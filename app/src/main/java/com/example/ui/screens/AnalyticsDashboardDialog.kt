@@ -64,7 +64,7 @@ fun AnalyticsDashboardDialog(
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.92f)
                 .clip(RoundedCornerShape(24.dp)),
-            color = MaterialTheme.colorScheme.surface,
+            color = theme.surfaceColor,
             tonalElevation = 8.dp
         ) {
             Column(
@@ -88,7 +88,7 @@ fun AnalyticsDashboardDialog(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF0D9488)),
+                                .background(Color(0xFFB9934C)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Default.Insights, contentDescription = null, tint = Color.White)
@@ -103,7 +103,7 @@ fun AnalyticsDashboardDialog(
                             Text(
                                 text = "تتبع سرعة التأليف، الأهداف اليومية، وأيام الالتزام",
                                 fontSize = 11.sp,
-                                color = Color.Gray
+                                color = theme.subtleTextColor
                             )
                         }
                     }
@@ -115,8 +115,8 @@ fun AnalyticsDashboardDialog(
                 // Streak Banner (أيام الالتزام المتتالية)
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFFFFFBEB),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFF59E0B)),
+                    color = if (theme.isDark) theme.cardColor else Color(0xFFF8F4EA),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFB9934C)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -141,17 +141,17 @@ fun AnalyticsDashboardDialog(
                                     text = "سلسلة الالتزام: ${currentDayData.streakDays} أيام متواصلة!",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 14.sp,
-                                    color = Color(0xFFB45309)
+                                    color = if (theme.isDark) Color(0xFFE2C98F) else Color(0xFF795D2A)
                                 )
                                 Text(
                                     text = "استمر في الكتابة يومياً للحفاظ على الزخم الإبداعي",
                                     fontSize = 10.sp,
-                                    color = Color(0xFF92400E)
+                                    color = theme.subtleTextColor
                                 )
                             }
                         }
                         Surface(
-                            color = Color(0xFFF59E0B),
+                            color = Color(0xFFB9934C),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
@@ -176,8 +176,8 @@ fun AnalyticsDashboardDialog(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.borderColor)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -190,7 +190,7 @@ fun AnalyticsDashboardDialog(
                         ) {
                             Column {
                                 Text("هدف الكلمات اليومي 🎯", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = theme.textColor)
-                                Text("${currentDayData.netWords} من ${currentDayData.targetWordGoal} كلمة", fontSize = 11.sp, color = Color.Gray)
+                                Text("${currentDayData.netWords} من ${currentDayData.targetWordGoal} كلمة", fontSize = 11.sp, color = theme.subtleTextColor)
                             }
                             TextButton(onClick = { isEditingGoal = !isEditingGoal }) {
                                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -233,8 +233,8 @@ fun AnalyticsDashboardDialog(
                                 .fillMaxWidth()
                                 .height(10.dp)
                                 .clip(RoundedCornerShape(5.dp)),
-                            color = Color(0xFF0D9488),
-                            trackColor = Color(0xFFE2E8F0)
+                            color = Color(0xFFB9934C),
+                            trackColor = theme.borderColor.copy(alpha = 0.45f)
                         )
 
                         Text(
@@ -250,8 +250,8 @@ fun AnalyticsDashboardDialog(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, theme.borderColor)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -263,7 +263,7 @@ fun AnalyticsDashboardDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("الإنتاجية الأسبوعية (آخر 7 أيام) 📈", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = theme.textColor)
-                            Text("الكلمات الصافية / يوم", fontSize = 10.sp, color = Color.Gray)
+                            Text("الكلمات الصافية / يوم", fontSize = 10.sp, color = theme.subtleTextColor)
                         }
 
                         // Custom Canvas Bar Chart
@@ -386,7 +386,7 @@ private fun WeeklyOutputBarChart(
             days.forEach { day ->
                 val daySub = day.dateKey.takeLast(5) // MM-DD
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(daySub, fontSize = 9.sp, color = Color.Gray)
+                    Text(daySub, fontSize = 9.sp, color = theme.subtleTextColor)
                     Text("${day.netWords}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
                 }
             }
@@ -406,8 +406,8 @@ private fun MetricStatCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+        colors = CardDefaults.cardColors(containerColor = theme.elevatedCardColor),
+        border = androidx.compose.foundation.BorderStroke(1.dp, theme.borderColor)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -418,10 +418,10 @@ private fun MetricStatCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
-                Text(title, fontSize = 11.sp, color = Color.Gray)
+                Text(title, fontSize = 11.sp, color = theme.subtleTextColor)
             }
             Text(value, fontSize = 17.sp, fontWeight = FontWeight.Black, color = Color(0xFF1E293B))
-            Text(subtitle, fontSize = 9.sp, color = Color.Gray)
+            Text(subtitle, fontSize = 9.sp, color = theme.subtleTextColor)
         }
     }
 }
