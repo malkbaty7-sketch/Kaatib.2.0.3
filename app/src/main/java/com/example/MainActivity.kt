@@ -159,8 +159,8 @@ class MainActivity : ComponentActivity() {
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(34.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .size(28.dp)
+                                                    .clip(RoundedCornerShape(9.dp))
                                                     .background(
                                                         Brush.linearGradient(
                                                             listOf(theme.primaryColor, theme.secondaryColor)
@@ -171,8 +171,8 @@ class MainActivity : ComponentActivity() {
                                                 Icon(
                                                     Icons.Default.AutoStories,
                                                     contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(19.dp)
+                                                    tint = if (theme.isDark) Color(0xFF101827) else Color.White,
+                                                    modifier = Modifier.size(15.dp)
                                                 )
                                             }
                                             Column {
@@ -182,8 +182,8 @@ class MainActivity : ComponentActivity() {
                                                 ) {
                                                     Text(
                                                         text = AppLocalization.string(currentLang, "app_name"),
-                                                        fontWeight = FontWeight.Black,
-                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 14.sp,
                                                         color = theme.textColor
                                                     )
                                                     if (isVip) {
@@ -203,7 +203,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 Text(
                                                     text = "استوديو التأليف والقراءة الذكية",
-                                                    fontSize = 9.sp,
+                                                    fontSize = 8.sp,
                                                     color = theme.subtleTextColor
                                                 )
                                             }
