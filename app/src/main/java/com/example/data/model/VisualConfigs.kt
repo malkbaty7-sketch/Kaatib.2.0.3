@@ -37,6 +37,36 @@ data class AppThemeData(
 }
 
 val defaultAppThemes = listOf(
+    // Kaatib Premium: restrained royal navy with warm gold accents.
+    // The light surface keeps long writing sessions comfortable; the paired
+    // royal-night palette is available separately for low-light environments.
+    AppThemeData(
+        id = "kaatibRoyal",
+        name = "كاتب الملكي (أزرق وذهبي)",
+        primaryColor = Color(0xFF142744),
+        secondaryColor = Color(0xFFB9934C),
+        textColor = Color(0xFF18263B),
+        surfaceColor = Color(0xFFFFFFFF),
+        backgroundColors = listOf(Color(0xFFF6F7FA), Color(0xFFF0F3F8)),
+        shadowColor = Color(0x1A142744),
+        elevationDp = 6.dp,
+        cornerRadiusDp = 18.dp,
+        isDark = false
+    ),
+    AppThemeData(
+        id = "kaatibRoyalNight",
+        name = "كاتب الملكي الليلي",
+        primaryColor = Color(0xFFD2B16B),
+        secondaryColor = Color(0xFFB9934C),
+        textColor = Color(0xFFF2F4F8),
+        surfaceColor = Color(0xFF182438),
+        backgroundColors = listOf(Color(0xFF101827), Color(0xFF182438)),
+        shadowColor = Color(0x66000000),
+        elevationDp = 6.dp,
+        cornerRadiusDp = 18.dp,
+        isDark = true
+    ),
+
     AppThemeData(
         id = "warmSunset",
         name = "الغروب الدافئ",

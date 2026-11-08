@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 val ttsCurrentSentence by viewModel.ttsManager.currentSentenceText.collectAsState()
                 val ttsSpeechRate by viewModel.ttsManager.speechRate.collectAsState()
 
-                var currentTab by remember { mutableStateOf("PROJECTS") } // FILES, EXTRACTION, PROJECTS, DOCUMENTS, SETTINGS
+                var currentTab by remember { mutableStateOf("HOME") } // HOME, FILES, EXTRACTION, PROJECTS, DOCUMENTS, SETTINGS
                 var isEditingProject by remember { mutableStateOf(false) }
                 var showDeviceDocsScreen by remember { mutableStateOf(false) }
                 var viewingDocUri by remember { mutableStateOf<String?>(null) }
@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
                 var showArabicConverterStudio by remember { mutableStateOf(false) }
                 var showCommandPalette by remember { mutableStateOf(false) }
 
-                BackHandler(enabled = viewingDocUri != null || showDeviceDocsScreen || isEditingProject || currentTab != "PROJECTS") {
+                BackHandler(enabled = viewingDocUri != null || showDeviceDocsScreen || isEditingProject || currentTab != "HOME") {
                     if (viewingDocUri != null) {
                         viewingDocUri = null
                     } else if (showDeviceDocsScreen) {
@@ -88,8 +88,8 @@ class MainActivity : ComponentActivity() {
                     } else if (isEditingProject) {
                         viewModel.saveCurrentProject()
                         isEditingProject = false
-                    } else if (currentTab != "PROJECTS") {
-                        currentTab = "PROJECTS"
+                    } else if (currentTab != "HOME") {
+                        currentTab = "HOME"
                     }
                 }
 
@@ -159,8 +159,8 @@ class MainActivity : ComponentActivity() {
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(34.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .size(28.dp)
+                                                    .clip(RoundedCornerShape(9.dp))
                                                     .background(
                                                         Brush.linearGradient(
                                                             listOf(theme.primaryColor, theme.secondaryColor)
@@ -171,8 +171,8 @@ class MainActivity : ComponentActivity() {
                                                 Icon(
                                                     Icons.Default.AutoStories,
                                                     contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(19.dp)
+                                                    tint = if (theme.isDark) Color(0xFF101827) else Color.White,
+                                                    modifier = Modifier.size(15.dp)
                                                 )
                                             }
                                             Column {
@@ -182,8 +182,8 @@ class MainActivity : ComponentActivity() {
                                                 ) {
                                                     Text(
                                                         text = AppLocalization.string(currentLang, "app_name"),
-                                                        fontWeight = FontWeight.Black,
-                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 14.sp,
                                                         color = theme.textColor
                                                     )
                                                     if (isVip) {
@@ -203,7 +203,7 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 Text(
                                                     text = "استوديو التأليف والقراءة الذكية",
-                                                    fontSize = 9.sp,
+                                                    fontSize = 8.sp,
                                                     color = theme.subtleTextColor
                                                 )
                                             }
@@ -598,6 +598,14 @@ class MainActivity : ComponentActivity() {
                                         )
 
                                         NavigationBarItem(
+                                            selected = currentTab == "HOME",
+                                            onClick = { currentTab = "HOME" },
+                                            icon = { Icon(Icons.Default.Home, contentDescription = "الرئيسية", modifier = Modifier.size(20.dp)) },
+                                            label = { Text("الرئيسية", fontSize = 10.sp, fontWeight = if (currentTab == "HOME") FontWeight.Bold else FontWeight.Medium) },
+                                            colors = navItemColors
+                                        )
+
+                                        NavigationBarItem(
                                             selected = currentTab == "FILES",
                                             onClick = { currentTab = "FILES" },
                                             icon = { Icon(Icons.Default.Folder, contentDescription = "المصادر", modifier = Modifier.size(20.dp)) },
@@ -654,6 +662,25 @@ class MainActivity : ComponentActivity() {
                                     label = "MainTabTransition"
                                 ) { targetTab ->
                                     when (targetTab) {
+                                        "HOME" -> DashboardScreen(
+                                            viewModel = viewModel,
+                                            theme = theme,
+                                            onOpenFiles = { currentTab = "FILES" },
+                                            onOpenExtraction = { currentTab = "EXTRACTION" },
+                                            onOpenProjects = { currentTab = "PROJECTS" },
+                                            onOpenDocuments = { currentTab = "DOCUMENTS" },
+                                            onOpenConverter = { showArabicConverterStudio = true },
+                                            onOpenBrowser = { showBrowserDialog = true },
+                                            onOpenAnalytics = { showAnalyticsDialog = true },
+                                            onOpenSubscription = { showSubscriptionDialog = true },
+                                            onOpenSettings = { currentTab = "SETTINGS" },
+                                            onStartAudio = {
+                                                val textToRead = activeChapters.firstOrNull()?.content ?: ""
+                                                if (textToRead.isNotBlank()) viewModel.startTtsReading(textToRead)
+                                                else Toast.makeText(this@MainActivity, "لا يوجد نص جاهز للقراءة الصوتية", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+
                                         "FILES" -> FilesScreen(
                                             viewModel = viewModel,
                                             onNavigateToExtraction = { currentTab = "EXTRACTION" },
