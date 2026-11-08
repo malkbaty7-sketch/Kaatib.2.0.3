@@ -4,6 +4,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -111,31 +112,62 @@ fun ProofreadingSheetDialog(
                         }
                     }
                 } else {
+                // Quality Score Header Bar
+                val qualityScore = remember(issues) {
+                    (100 - (issues.size * 6)).coerceIn(40, 100)
+                }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (qualityScore >= 85) Color(0xFFECFDF5) else Color(0xFFFFFBEB),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (qualityScore >= 85) Color(0xFF10B981) else Color(0xFFF59E0B)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "تم رصد ${issues.size} ملحوظات لغوية وأسلوبية:",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = theme.primaryColor
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (qualityScore >= 85) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("$qualityScore", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                            Column {
+                                Text(
+                                    text = if (qualityScore >= 85) "مؤشر جودة النص: ممتاز 🌟" else "مؤشر جودة النص: بحاجة لتحسين ⚠️",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (qualityScore >= 85) Color(0xFF065F46) else Color(0xFF92400E)
+                                )
+                                Text(
+                                    text = "تم احتساب التقييم بناءً على دقة النحو والإملاء والسلامة التعبيرية",
+                                    fontSize = 10.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
 
-                        Button(
-                            onClick = { onApplyAllFixes(issues) },
-                            colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("تطبيق جميع التصحيحات", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        if (issues.isNotEmpty()) {
+                            Button(
+                                onClick = { onApplyAllFixes(issues) },
+                                colors = ButtonDefaults.buttonColors(containerColor = theme.primaryColor),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("إصلاح الكل (${issues.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                     LazyColumn(
                         modifier = Modifier.weight(1f),

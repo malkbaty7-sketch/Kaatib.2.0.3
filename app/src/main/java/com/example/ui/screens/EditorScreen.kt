@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +42,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
 import com.example.data.model.*
 import com.example.ui.MainViewModel
+import com.example.ui.components.AuthorServicesHubSheet
 import com.example.ui.components.CoverCanvasView
 import com.example.ui.components.CoverCustomizerDialog
 import com.example.ui.components.CustomFontPickerDialog
@@ -51,14 +53,18 @@ import com.example.ui.components.PlotBranchingDialog
 import com.example.ui.components.ProofreadingSheetDialog
 import com.example.ui.components.FeedbackCommentsSheet
 import com.example.ui.components.ImageGeneratorDialog
+import com.example.ui.components.InEditorFindReplaceBar
+import com.example.ui.components.QuickSnippetsAndScratchpadSheet
 import com.example.ui.components.RichWritingToolbar
 import com.example.ui.components.SceneBreakdownSheet
 import com.example.ui.components.SearchAndReplaceDialog
+import com.example.ui.components.SmartKeyboardAccessoryBar
 import com.example.ui.components.SnapshotHistoryDialog
 import com.example.ui.components.StockImagePickerBottomSheet
 import com.example.ui.components.SupportingPaneContent
 import com.example.ui.components.TtsPlayerBar
 import com.example.ui.screens.DigitalCorkboardScreen
+import com.example.util.ArabicTypoAndPunctuationHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,6 +143,13 @@ fun EditorScreen(
     var katibViewMode by remember { mutableStateOf("defaultView") }
     // Authentic Paper Texture Modes: CLASSIC, RULED, DOT_GRID, MANUSCRIPT_FRAME
     var paperTextureMode by remember { mutableStateOf("CLASSIC") }
+
+    // Smart Writing & Productivity Suite States
+    var isTypewriterMode by remember { mutableStateOf(false) }
+    var isParagraphDimmingMode by remember { mutableStateOf(false) }
+    var showSnippetsSheet by remember { mutableStateOf(false) }
+    var scratchpadText by remember { mutableStateOf("") }
+    var showInlineFindReplace by remember { mutableStateOf(false) }
 
     val isReviewMode by viewModel.isReviewModeActive.collectAsState()
     val activeChapterComments by viewModel.activeChapterComments.collectAsState()
@@ -354,216 +367,21 @@ fun EditorScreen(
                                 Icon(Icons.Default.Save, contentDescription = "حفظ", tint = theme.primaryColor, modifier = Modifier.size(16.dp))
                             }
 
-                            // 5. Overflow Dropdown Menu with all Tools and Services
-                            Box {
-                                IconButton(
-                                    onClick = { showServicesMenu = true },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "المزيد من الخدمات والأدوات", modifier = Modifier.size(16.dp))
-                                }
-                            DropdownMenu(
-                                expanded = showServicesMenu,
-                                onDismissRequest = { showServicesMenu = false }
+                            // 5. Author Services Hub Button (Prominent & Categorized)
+                            Surface(
+                                onClick = { showServicesMenu = true },
+                                shape = RoundedCornerShape(8.dp),
+                                color = theme.primaryColor.copy(alpha = 0.12f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, theme.primaryColor.copy(alpha = 0.35f)),
+                                modifier = Modifier.height(28.dp)
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("إحصائيات وتحليلات الإنتاجية 📊") },
-                                    leadingIcon = { Icon(Icons.Default.Insights, contentDescription = null, tint = Color(0xFF0D9488)) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showAnalyticsDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("فحص الجودة والامتثال للنشر (Pre-flight) ✈️") },
-                                    leadingIcon = { Icon(Icons.Default.Verified, contentDescription = null, tint = Color(0xFF2563EB)) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showPreflightDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("ترقية الحساب (Katib VIP) 💳") },
-                                    leadingIcon = { Icon(Icons.Default.WorkspacePremium, contentDescription = null, tint = Color(0xFFD97706)) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showPaywallDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("لوحة التخطيط والتنظيم المرئي 📌") },
-                                    leadingIcon = { Icon(Icons.Default.DashboardCustomize, contentDescription = null, tint = Color(0xFFD97706)) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showCorkboardScreen = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("توليد الصور بالذكاء الاصطناعي 🎨") },
-                                    leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF9333EA)) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showAiImageGeneratorDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("ملاحظات القراءة التجريبية (${activeChapterComments.size}) 📝") },
-                                    leadingIcon = { Icon(Icons.Default.RateReview, contentDescription = null, tint = Color(0xFF2563EB)) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showFeedbackSheet = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (isReviewMode) "إنهاء وضع المراجعة 👁️" else "تفعيل وضع المراجعة التجريبية 👁️") },
-                                    leadingIcon = { Icon(if (isReviewMode) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        viewModel.toggleReviewMode()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("القارئ الصوتي والتدقيق السمعي 🎧") },
-                                    leadingIcon = { Icon(Icons.Default.RecordVoiceOver, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showTtsPlayer = true
-                                        val content = currentChapter?.content ?: ""
-                                        if (content.isNotBlank()) {
-                                            viewModel.startTtsReading(content)
-                                        }
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("مكتبة الصور السحابية (Unsplash) 🖼️") },
-                                    leadingIcon = { Icon(Icons.Default.ImageSearch, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showStockImagePicker = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("التدقيق اللغوي الذكي (Proofreading) 🔍") },
-                                    leadingIcon = { Icon(Icons.Default.Spellcheck, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showProofreadingDialog = true
-                                        viewModel.runProofreadingForCurrentChapter()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("مسارات وتفرع الحبكة (Plot Branching) 🔀") },
-                                    leadingIcon = { Icon(Icons.Default.AltRoute, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showPlotBranchingDialog = true
-                                        viewModel.generatePlotBranchesForCurrentScene()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("تفكيك المشاهد (Scene Breakdown) 🎬") },
-                                    leadingIcon = { Icon(Icons.Default.AccountTree, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showSceneBreakdownSheet = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("استرجاع لقطات العمل (Snapshots) 🕒") },
-                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showSnapshotHistoryDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("إدارة وتثبيت الخطوط 🔤") },
-                                    leadingIcon = { Icon(Icons.Default.FontDownload, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showFontPickerDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("استوديو أغلفة الكتب 📖") },
-                                    leadingIcon = { Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showCoversStudio = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("تخصيص الورقة والصفحة 🎨") },
-                                    leadingIcon = { Icon(Icons.Default.Palette, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showPaperSettingsDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("مخطط القصة والتوتر الدرامي 📊") },
-                                    leadingIcon = { Icon(Icons.Default.ShowChart, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showStoryboardDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("قارئ المصادر والاقتباسات 📚") },
-                                    leadingIcon = { Icon(Icons.Default.VerticalSplit, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showSourceReaderDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("سجل النسخ واللقطات الاحتياطية 🕒") },
-                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showVersionHistoryDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("تنقيح وتصحيح النصوص ✍️") },
-                                    leadingIcon = { Icon(Icons.Default.Spellcheck, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showGrammarDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("أهداف عدد الكلمات 🎯") },
-                                    leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showGoalDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(if (suggestions.isNotEmpty()) "الاقتراحات الذكية 💡 (${suggestions.size})" else "الاقتراحات الذكية 💡") },
-                                    leadingIcon = { Icon(Icons.Default.TipsAndUpdates, contentDescription = null, tint = Color(0xFFFFA000)) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showSuggestionsDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("مشاركة المشروع 🔗") },
-                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        showShareDialog = true
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("وضع التركيز الكامل 🔲") },
-                                    leadingIcon = { Icon(Icons.Default.Fullscreen, contentDescription = null, tint = theme.primaryColor) },
-                                    onClick = {
-                                        showServicesMenu = false
-                                        isFocusMode = true
-                                    }
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.Widgets, contentDescription = "الخدمات والاستوديوهات", tint = theme.primaryColor, modifier = Modifier.size(14.dp))
+                                    Text("الخدمات 🌟", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
                                 }
                             }
                         }
@@ -1080,6 +898,21 @@ fun EditorScreen(
                 }
             }
 
+            // In-Editor Floating Find & Replace Bar (Smart Arabic Search)
+            AnimatedVisibility(visible = showInlineFindReplace) {
+                InEditorFindReplaceBar(
+                    theme = theme,
+                    currentText = currentChapter?.content ?: "",
+                    onNavigateToMatch = { start, end ->
+                        // Visual notification for match coordinates
+                    },
+                    onApplyTextUpdate = { updatedText ->
+                        viewModel.updateCurrentChapterContent(updatedText)
+                    },
+                    onClose = { showInlineFindReplace = false }
+                )
+            }
+
             // Expanded Paper Canvas Area (تمت إزالة شريط اختيار نمط العرض المنفصل ودمجه في الشريط العلوي لتوسيع مساحة الكتابة)
             Box(
                 modifier = Modifier
@@ -1156,7 +989,11 @@ fun EditorScreen(
                             isReadOnly = isReviewMode,
                             fontFamily = activeFontFamily,
                             katibViewMode = katibViewMode,
-                            paperTextureMode = paperTextureMode
+                            paperTextureMode = paperTextureMode,
+                            isTypewriterMode = isTypewriterMode,
+                            isParagraphDimmingMode = isParagraphDimmingMode,
+                            spokenSentence = if (ttsPlaybackState == com.example.util.TtsPlaybackState.PLAYING) ttsCurrentSentence else "",
+                            onOpenSnippets = { showSnippetsSheet = true }
                         )
                     }
                 } else {
@@ -1188,7 +1025,11 @@ fun EditorScreen(
                                 isReadOnly = isReviewMode,
                                 fontFamily = activeFontFamily,
                                 katibViewMode = katibViewMode,
-                                paperTextureMode = paperTextureMode
+                                paperTextureMode = paperTextureMode,
+                                isTypewriterMode = isTypewriterMode,
+                                isParagraphDimmingMode = isParagraphDimmingMode,
+                                spokenSentence = if (ttsPlaybackState == com.example.util.TtsPlaybackState.PLAYING) ttsCurrentSentence else "",
+                                onOpenSnippets = { showSnippetsSheet = true }
                             )
                         }
                         Box(modifier = Modifier.weight(1f)) {
@@ -1206,7 +1047,11 @@ fun EditorScreen(
                                 isReadOnly = true,
                                 fontFamily = activeFontFamily,
                                 katibViewMode = katibViewMode,
-                                paperTextureMode = paperTextureMode
+                                paperTextureMode = paperTextureMode,
+                                isTypewriterMode = isTypewriterMode,
+                                isParagraphDimmingMode = isParagraphDimmingMode,
+                                spokenSentence = "",
+                                onOpenSnippets = { showSnippetsSheet = true }
                             )
                         }
                     }
@@ -1285,6 +1130,36 @@ fun EditorScreen(
                             )
                         }
 
+                        // Typewriter Scroll Toggle Pill
+                        Surface(
+                            onClick = { isTypewriterMode = !isTypewriterMode },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isTypewriterMode) Color(0xFF3B82F6) else Color.White.copy(alpha = 0.14f)
+                        ) {
+                            Text(
+                                text = if (isTypewriterMode) "⌨️ آلة كاتبة ✓" else "⌨️ آلة كاتبة",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isTypewriterMode) Color.White else Color(0xFF93C5FD),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        // Paragraph Dimming Toggle Pill
+                        Surface(
+                            onClick = { isParagraphDimmingMode = !isParagraphDimmingMode },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isParagraphDimmingMode) Color(0xFF8B5CF6) else Color.White.copy(alpha = 0.14f)
+                        ) {
+                            Text(
+                                text = if (isParagraphDimmingMode) "🎯 تركيز الفقرة ✓" else "🎯 تركيز الفقرة",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isParagraphDimmingMode) Color.White else Color(0xFFC4B5FD),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
                         Surface(
                             onClick = { isFocusMode = !isFocusMode },
                             shape = RoundedCornerShape(10.dp),
@@ -1343,10 +1218,39 @@ fun EditorScreen(
                         onClick = { showFontPickerDialog = true },
                         shape = RoundedCornerShape(10.dp),
                         color = theme.primaryColor.copy(alpha = 0.1f),
-                        modifier = Modifier.height(32.dp).weight(0.7f)
+                        modifier = Modifier.height(32.dp).weight(0.65f)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text("🔤 الخط", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
+                        }
+                    }
+
+                    // Quick Snippets / Scratchpad Trigger Pill
+                    Surface(
+                        onClick = { showSnippetsSheet = true },
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF10B981).copy(alpha = 0.14f),
+                        modifier = Modifier.height(32.dp).weight(0.75f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("📋 قصاصات", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF047857))
+                        }
+                    }
+
+                    // In-Editor Search Trigger Pill
+                    Surface(
+                        onClick = { showInlineFindReplace = !showInlineFindReplace },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (showInlineFindReplace) theme.primaryColor else theme.primaryColor.copy(alpha = 0.1f),
+                        modifier = Modifier.height(32.dp).weight(0.6f)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                "🔍 بحث",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (showInlineFindReplace) Color.White else theme.primaryColor
+                            )
                         }
                     }
 
@@ -1354,7 +1258,7 @@ fun EditorScreen(
                         onClick = { showCorkboardScreen = true },
                         shape = RoundedCornerShape(10.dp),
                         color = theme.primaryColor.copy(alpha = 0.14f),
-                        modifier = Modifier.height(32.dp).weight(1.15f)
+                        modifier = Modifier.height(32.dp).weight(1.05f)
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 4.dp)) {
                             Text(
@@ -1370,7 +1274,7 @@ fun EditorScreen(
                         onClick = { showPaperSettingsDialog = true },
                         shape = RoundedCornerShape(10.dp),
                         color = theme.primaryColor.copy(alpha = 0.1f),
-                        modifier = Modifier.height(32.dp).weight(0.7f)
+                        modifier = Modifier.height(32.dp).weight(0.65f)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text("🎨 الورقة", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = theme.primaryColor)
@@ -1433,6 +1337,60 @@ fun EditorScreen(
         }
     }
 }
+    // Modal: Author Services & Studios Hub (Categorized Visual Hub)
+    if (showServicesMenu) {
+        AuthorServicesHubSheet(
+            theme = theme,
+            onDismiss = { showServicesMenu = false },
+            onSelectService = { serviceId ->
+                when (serviceId) {
+                    "COVERS_STUDIO" -> showCoversStudio = true
+                    "PAPER_SETTINGS" -> showPaperSettingsDialog = true
+                    "FONT_PICKER" -> showFontPickerDialog = true
+                    "AI_IMAGE_GEN" -> showAiImageGeneratorDialog = true
+                    "UNSPLASH_IMAGES" -> showStockImagePicker = true
+                    "PROOFREADING" -> {
+                        showProofreadingDialog = true
+                        viewModel.runProofreadingForCurrentChapter()
+                    }
+                    "AUDIO_TTS" -> {
+                        showTtsPlayer = true
+                        val content = currentChapter?.content ?: ""
+                        if (content.isNotBlank()) viewModel.startTtsReading(content)
+                    }
+                    "PREFLIGHT_CHECK" -> showPreflightDialog = true
+                    "GRAMMAR_REFINE" -> showGrammarDialog = true
+                    "BETA_READING" -> showFeedbackSheet = true
+                    "CORKBOARD" -> showCorkboardScreen = true
+                    "STORYBOARD_ARC" -> showStoryboardDialog = true
+                    "PLOT_BRANCHES" -> {
+                        showPlotBranchingDialog = true
+                        viewModel.generatePlotBranchesForCurrentScene()
+                    }
+                    "SCENE_BREAKDOWN" -> showSceneBreakdownSheet = true
+                    "SPLIT_READER" -> showSourceReaderDialog = true
+                    "ANALYTICS" -> showAnalyticsDialog = true
+                    "SNAPSHOTS_HISTORY" -> showSnapshotHistoryDialog = true
+                    "WORD_GOALS" -> showGoalDialog = true
+                    "SHARE_PROJECT" -> showShareDialog = true
+                    "VIP_UPGRADE" -> showPaywallDialog = true
+                }
+            }
+        )
+    }
+
+    // Modal: Quick Snippets and Scratchpad Sheet
+    if (showSnippetsSheet) {
+        QuickSnippetsAndScratchpadSheet(
+            theme = theme,
+            initialScratchpadText = scratchpadText,
+            onSaveScratchpad = { scratchpadText = it },
+            onInsertSnippet = { snip ->
+                val cur = currentChapter?.content ?: ""
+                viewModel.updateCurrentChapterContent(if (cur.isBlank()) snip else "$cur\n$snip")
+            },
+            onDismiss = { showSnippetsSheet = false }
+        )
     }
 
     // Modal: Paper & Layout Customization (FR-UI-03..07)
@@ -1874,6 +1832,7 @@ fun EditorScreen(
             onDismiss = { showPaywallDialog = false }
         )
     }
+    }
 }
 
 private fun shareFile(context: android.content.Context, file: java.io.File, mimeType: String) {
@@ -1913,13 +1872,25 @@ fun SinglePaperSheet(
     isReadOnly: Boolean = false,
     fontFamily: androidx.compose.ui.text.font.FontFamily = androidx.compose.ui.text.font.FontFamily.Default,
     katibViewMode: String = "defaultView",
-    paperTextureMode: String = "CLASSIC"
+    paperTextureMode: String = "CLASSIC",
+    isTypewriterMode: Boolean = false,
+    isParagraphDimmingMode: Boolean = false,
+    spokenSentence: String = "",
+    onOpenSnippets: () -> Unit = {}
 ) {
     // Undo / Redo history & Save Checkpoints
     val coroutineScope = rememberCoroutineScope()
     val localCtx = LocalContext.current
     var undoStack by remember(chapter?.id) { mutableStateOf(listOf<String>()) }
     var redoStack by remember(chapter?.id) { mutableStateOf(listOf<String>()) }
+    // Smart TextFieldValue tracking for cursor manipulation & punctuation accessories
+    var textFieldValue by remember(chapter?.id) {
+        mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(
+            text = chapter?.content ?: "",
+            selection = androidx.compose.ui.text.TextRange((chapter?.content ?: "").length)
+        ))
+    }
+
     var currentContent by remember(chapter?.id, chapter?.content) { mutableStateOf(chapter?.content ?: "") }
     var lastSavedCheckpoint by remember(chapter?.id) { mutableStateOf(chapter?.content ?: "") }
 
@@ -1953,11 +1924,15 @@ fun SinglePaperSheet(
         else -> paperColor
     }
 
-    fun handleTextEdit(newText: String) {
+    fun handleTextEdit(newText: String, newSelection: androidx.compose.ui.text.TextRange? = null) {
         if (newText != currentContent) {
             undoStack = (undoStack + currentContent).takeLast(50)
             redoStack = emptyList()
             currentContent = newText
+            textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                text = newText,
+                selection = newSelection ?: androidx.compose.ui.text.TextRange(newText.length)
+            )
             onContentChange(newText)
         }
     }
@@ -1968,6 +1943,10 @@ fun SinglePaperSheet(
             undoStack = undoStack.dropLast(1)
             redoStack = redoStack + currentContent
             currentContent = previous
+            textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                text = previous,
+                selection = androidx.compose.ui.text.TextRange(previous.length)
+            )
             onContentChange(previous)
         }
     }
@@ -1978,7 +1957,59 @@ fun SinglePaperSheet(
             redoStack = redoStack.dropLast(1)
             undoStack = undoStack + currentContent
             currentContent = next
+            textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                text = next,
+                selection = androidx.compose.ui.text.TextRange(next.length)
+            )
             onContentChange(next)
+        }
+    }
+
+    fun insertAtCursor(textToInsert: String) {
+        val sel = textFieldValue.selection
+        val oldText = textFieldValue.text
+        val newText = oldText.substring(0, sel.min) + textToInsert + oldText.substring(sel.max)
+        val newPos = sel.min + textToInsert.length
+        handleTextEdit(newText, androidx.compose.ui.text.TextRange(newPos))
+    }
+
+    fun insertEnclosingAtCursor(prefix: String, suffix: String) {
+        val sel = textFieldValue.selection
+        val oldText = textFieldValue.text
+        val selectedContent = if (sel.collapsed) "" else oldText.substring(sel.min, sel.max)
+        val replacement = "$prefix$selectedContent$suffix"
+        val newText = oldText.substring(0, sel.min) + replacement + oldText.substring(sel.max)
+        val newPos = if (selectedContent.isEmpty()) sel.min + prefix.length else sel.min + replacement.length
+        handleTextEdit(newText, androidx.compose.ui.text.TextRange(newPos))
+    }
+
+    fun moveCursor(delta: Int) {
+        val currentPos = textFieldValue.selection.end
+        val newPos = (currentPos + delta).coerceIn(0, textFieldValue.text.length)
+        textFieldValue = textFieldValue.copy(selection = androidx.compose.ui.text.TextRange(newPos))
+    }
+
+    fun jumpToLineEdge(toEnd: Boolean) {
+        val pos = textFieldValue.selection.end
+        val text = textFieldValue.text
+        if (toEnd) {
+            val nextNewline = text.indexOf('\n', pos)
+            val target = if (nextNewline != -1) nextNewline else text.length
+            textFieldValue = textFieldValue.copy(selection = androidx.compose.ui.text.TextRange(target))
+        } else {
+            val prevNewline = text.lastIndexOf('\n', (pos - 1).coerceAtLeast(0))
+            val target = if (prevNewline != -1) prevNewline + 1 else 0
+            textFieldValue = textFieldValue.copy(selection = androidx.compose.ui.text.TextRange(target))
+        }
+    }
+
+    fun applyAutoPunctuationFix() {
+        val (cleaned, count) = ArabicTypoAndPunctuationHelper.cleanArabicText(currentContent)
+        if (count > 0) {
+            handleTextEdit(cleaned)
+            Toast.makeText(localCtx, "تم تدقيق وضبط $count من علامات الترقيم والمسافات العربية ✨", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(localCtx, "علامات الترقيم والمسافات منضبطة تماماً 👍", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -2244,32 +2275,91 @@ fun SinglePaperSheet(
                         }
                     }
 
-                    // Main Editable Content
+                    // Main Editable Content with Smart Typo, Typewriter & Focus Dimming support
                     if (!isReadOnly) {
-                        OutlinedTextField(
-                            value = currentContent,
-                            onValueChange = { handleTextEdit(it) },
-                            placeholder = { Text("ابدأ بكتابة أفكارك وصياغة محتواك هنا...") },
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                fontFamily = fontFamily,
-                                fontSize = fontSizeSp.sp,
-                                lineHeight = (fontSizeSp * lineSpacingFactor).sp,
-                                color = textColor,
-                                textAlign = textAlign
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 350.dp)
-                                .then(
-                                    if (highlightColor != null) {
-                                        Modifier.background(highlightColor!!.copy(alpha = 0.25f), RoundedCornerShape(4.dp))
-                                    } else Modifier
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Real-time Karaoke Audio Proofreading Highlight Banner
+                            if (spokenSentence.isNotBlank()) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFFEF3C7),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.6f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(Icons.Default.VolumeUp, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(16.dp))
+                                        Text(
+                                            text = "🎧 استماع وتدقيق سمعي: «$spokenSentence»",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF92400E)
+                                        )
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = textFieldValue,
+                                onValueChange = { newValue ->
+                                    textFieldValue = newValue
+                                    if (newValue.text != currentContent) {
+                                        undoStack = (undoStack + currentContent).takeLast(50)
+                                        redoStack = emptyList()
+                                        currentContent = newValue.text
+                                        onContentChange(newValue.text)
+                                    }
+                                },
+                                placeholder = { Text("ابدأ بكتابة أفكارك وصياغة محتواك هنا...") },
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    fontFamily = fontFamily,
+                                    fontSize = fontSizeSp.sp,
+                                    lineHeight = (fontSizeSp * lineSpacingFactor).sp,
+                                    color = if (isParagraphDimmingMode) textColor else textColor,
+                                    textAlign = textAlign
                                 ),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 350.dp)
+                                    .then(
+                                        if (isTypewriterMode) {
+                                            Modifier.padding(bottom = 220.dp)
+                                        } else Modifier
+                                    )
+                                    .then(
+                                        if (highlightColor != null) {
+                                            Modifier.background(highlightColor!!.copy(alpha = 0.25f), RoundedCornerShape(4.dp))
+                                        } else Modifier
+                                    ),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent
+                                )
                             )
-                        )
+
+                            // Smart Keyboard Accessory Bar docked at bottom of the active editor card
+                            SmartKeyboardAccessoryBar(
+                                theme = theme,
+                                canUndo = undoStack.isNotEmpty(),
+                                canRedo = redoStack.isNotEmpty(),
+                                onUndo = { handleUndo() },
+                                onRedo = { handleRedo() },
+                                onInsertPunctuation = { insertAtCursor(it) },
+                                onInsertEnclosing = { p, s -> insertEnclosingAtCursor(p, s) },
+                                onMoveCursorLeft = { moveCursor(-1) },
+                                onMoveCursorRight = { moveCursor(1) },
+                                onJumpLineStart = { jumpToLineEdge(toEnd = false) },
+                                onJumpLineEnd = { jumpToLineEdge(toEnd = true) },
+                                onToggleSearch = { showSearchReplaceDialog = true },
+                                onToggleSnippets = onOpenSnippets,
+                                onApplyAutoPunctuationFix = { applyAutoPunctuationFix() }
+                            )
+                        }
                     } else {
                         Text(
                             text = if (chapter.content.isNotBlank()) chapter.content else "(صفحة فارغة)",
