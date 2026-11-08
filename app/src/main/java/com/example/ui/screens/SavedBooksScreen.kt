@@ -102,6 +102,7 @@ fun SavedBooksScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(theme.backgroundBrush)
                 .padding(paddingValues)
         ) {
             // Header Stats Card & Reading Challenge
