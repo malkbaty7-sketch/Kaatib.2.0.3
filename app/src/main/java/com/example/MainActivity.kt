@@ -88,8 +88,8 @@ class MainActivity : ComponentActivity() {
                     } else if (isEditingProject) {
                         viewModel.saveCurrentProject()
                         isEditingProject = false
-                    } else if (currentTab != "PROJECTS") {
-                        currentTab = "PROJECTS"
+                    } else if (currentTab != "HOME") {
+                        currentTab = "HOME"
                     }
                 }
 
